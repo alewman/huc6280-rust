@@ -33,7 +33,7 @@ struct Noise {
 }
 
 impl Noise {
-    fn next(&mut self) -> u64 {
+    fn draw(&mut self) -> u64 {
         self.state = self
             .state
             .wrapping_mul(6364136223846793005)
@@ -49,7 +49,7 @@ impl Noise {
     fn tick(&mut self, pins: &mut Pins) {
         self.count += 1;
         if self.count & 0x3FF == 0 {
-            let roll = self.next() >> 32;
+            let roll = self.draw() >> 32;
             pins.set_irq_lines(roll & 2 != 0, roll & 1 != 0, roll & 4 != 0);
             if (roll >> 3) & 7 == 0 {
                 pins.set_irq_disable((roll >> 6) as u8 & 7);
@@ -79,7 +79,7 @@ fn seen(pins: &Pins) -> u64 {
 impl Bus for Noise {
     fn read(&mut self, address: u32, pins: &mut Pins) -> u8 {
         self.tick(pins);
-        let state = self.next();
+        let state = self.draw();
         let mut value = (state >> 56) as u8;
         if matches!(value, 0x73 | 0xC3 | 0xD3 | 0xE3 | 0xF3) && (state >> 48) & 0x3F != 0 {
             value ^= 0x01;

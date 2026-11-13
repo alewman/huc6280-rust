@@ -11,10 +11,16 @@ use huc6280::{
 /// 2 MB of RAM that records every cycle with what the pins showed.
 struct Ram {
     memory: Vec<u8>,
-    cycles: Vec<(Kind, Option<u32>, bool)>,
-    /// A line change to make during the cycle with this index: (IRQ1, IRQ2, TIQ).
-    during: Option<(usize, (bool, bool, bool))>,
+    cycles: Vec<Cycle>,
+    /// A line change to make during the cycle with this index.
+    during: Option<(usize, Lines)>,
 }
+
+/// The three maskable inputs: (IRQ1, IRQ2, TIQ).
+type Lines = (bool, bool, bool);
+
+/// One cycle as a callback saw it: the kind, the address, the clock switch.
+type Cycle = (Kind, Option<u32>, bool);
 
 impl Bus for Ram {
     fn read(&mut self, address: u32, pins: &mut Pins) -> u8 {

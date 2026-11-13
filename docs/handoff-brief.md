@@ -126,3 +126,73 @@ that cannot build: CI is where clippy runs; write clippy-clean code regardless.
 - Report at the end: the rung results with numbers, the faults table, the Rust-forced differences,
   anything in the Python core that looked wrong, and what `pcengine-rust` should know about the
   crate's API (the `Bus` trait, how a board delivers interrupt lines and reads `high_speed`).
+
+## What was built
+
+Written 2026-11-12 by the session that did the work (Claude Fable 5.2), for
+whoever picks the family's order up at step 2 (`pcengine-rust`).
+
+**The crate.** `huc6280` (package `huc6280-rust`), twelve modules, each the
+transcription of the Python module of the same name at `v0.3.0`
+(`src/core.rs` is `_core.py`, and so on), on `sixfiveohtwo` at `71747eb` by
+its GitHub URL. Every named switch is a public field with the reference's
+default. `src/dispatch.rs` is generated from the reference's `OPCODES`
+(`scripts/make_dispatch.py`). Not transcribed: `debug.py`, `console.py`,
+`disasm.py`, `__main__.py`; of `harness.py` only what the MAME replay uses,
+in `src/bin/replay.rs`.
+
+**The ladder**, all six rungs passing at the commit this section went in with
+(numbers in the README's "Certification"):
+
+| Rung | Script | Judge |
+| --- | --- | --- |
+| 1 | `scripts/rung1.sh` | the reference's trace comparison on generated directed scenarios; the arithmetic tables by digest |
+| 2 | `scripts/rung2.sh` | the 640,000 SingleStepTests cases on both cores, verdict and masks compared case for case, under both decimal formulas |
+| 3 | `scripts/rung3.sh` | Dormann's relocated test to its success trap; the reference's instruction count |
+| 4 | `scripts/rung4.sh` | the reference's trace comparison on the interrupt workout, random and swept, in every poll and vanished-interrupt mode |
+| 5 | `scripts/rung5.sh` | six MAME traces replayed as the reference replays them (they were present), report and digest compared; and a synthetic program by digest, which is all CI has |
+| 6 | `scripts/rung6.sh` | 24 seeded faults, each caught |
+
+**Decisions made here that the brief left open.**
+
+- *What a bus callback gets.* Not `&mut Frame` as in 6502-rust but `&mut Pins`
+  (the frame, the three lines, the disable register, `high_speed`, the
+  cycle's kind, the opcode): everything the reference's host reaches through
+  `cpu.` from inside a callback. `pcengine-rust` sets the lines with
+  `pins.set_irq_lines(irq1, irq2, tiq)`, writes `$1402` with
+  `pins.set_irq_disable(value)`, and reads `pins.high_speed` for the length of
+  the cycle it is in. The README's "For a board author" is the whole surface.
+- *The scenarios are generated, not committed* (`scripts/make_scenarios.py`
+  writes them to `external/scenarios/`; they are seeded and the large ones
+  are 3 MB each). `conformance/README.md` is the format.
+- *Rung 2 compares verdicts, not only totals*: `scripts/reference_sst.py`
+  and `sst --verdicts` each write a line per case.
+- *Rung 5 did both* things the brief offers: the MAME replay, because the
+  traces were there, and the synthetic program, because CI has no traces.
+- *Dormann's source* (GPL-3.0, a test program) is fetched by
+  `scripts/fetch_dormann.sh` into the reference checkout under `external/`
+  and built there by the reference's own scripts; it was not opened.
+
+**Found in the reference** (the README's "Notes on the reference" has the
+five items and `scripts/reference_notes.py` shows the first three on the
+reference). None is a divergence: the Rust
+core reproduces each. Three are about interrupt lines changing in an
+instruction's last cycle (the vanished-interrupt path skipping the frame's
+deferral; a swap of sources that leaves `IRQ_LINE` unchanged; `_lines_before`
+missing from `CPUState`), and they share a cause: the three lines live beside
+the frame instead of in it. If huc6280-python changes any of them, this crate
+follows by re-transcription and the rungs say whether it did.
+
+**A trap in the fault runner, for the next transcription.** Building every
+faulted tree into one target directory makes Cargo treat them as one package
+and decide by modification times, and `copytree` keeps the originals' times:
+a tree with no freshly written file silently reuses the previous tree's
+build. `scripts/seeded_faults.py` rewrites a file in every tree, the
+unfaulted one included, and refuses to go on unless the unfaulted tree passes
+every rung.
+
+**Not done.** No GitHub repository, no push (as instructed). `cargo clippy`
+could not run locally (the installed clippy is 1.78, the crate needs 1.85):
+the code was written to be clippy-clean and CI is where that is checked.
+`pcengine-rust`, the speed fork and play-pce are the next steps of the order
+above.

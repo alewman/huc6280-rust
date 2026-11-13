@@ -266,11 +266,32 @@ def main() -> int:
     rungs = Rungs(args)
     target = args.work / "target"
 
+    def plant(name: str, file: str, old: str, new: str) -> Path | None:
+        """A copy of the crate with one replacement made (none: the file is only rewritten)."""
+        tree = args.work / name
+        if tree.exists():
+            shutil.rmtree(tree)
+        shutil.copytree(ROOT / "src", tree / "src")
+        shutil.copy(ROOT / "Cargo.toml", tree / "Cargo.toml")
+        shutil.copy(ROOT / "Cargo.lock", tree / "Cargo.lock")
+        source = tree / "src" / file
+        text = source.read_text()
+        if old and text.count(old) != 1:
+            print(f"{name}: the fault's text is in {file} {text.count(old)} times, not once")
+            return None
+        # Every tree is built into one target directory, where Cargo takes them for one
+        # package and goes by modification times: the copy keeps the originals', so the
+        # file written here is what makes Cargo build this tree and not reuse the last.
+        source.write_text(text.replace(old, new) if old else text)
+        build = run(["cargo", "build", "--release", "-q", "--manifest-path", str(tree / "Cargo.toml"),
+                     "--target-dir", str(target)])
+        if build.returncode:
+            print(f"{name}: does not build\n{build.stderr[-800:]}")
+            return None
+        return tree
+
     # The unfaulted tree must pass every rung here, or a catch means nothing.
-    build = run(["cargo", "build", "--release", "-q", "--manifest-path", str(ROOT / "Cargo.toml"),
-                 "--target-dir", str(target)])
-    if build.returncode:
-        print(f"the tree does not build\n{build.stderr[-800:]}")
+    if plant("clean", "lib.rs", "", "") is None:
         return 2
     for label, method in ORDER:
         if not getattr(rungs, method)(target / "release", args.work / "clean"):
@@ -284,22 +305,8 @@ def main() -> int:
         if args.only and name != args.only:
             continue
         count += 1
-        tree = args.work / name
-        if tree.exists():
-            shutil.rmtree(tree)
-        shutil.copytree(ROOT / "src", tree / "src")
-        shutil.copy(ROOT / "Cargo.toml", tree / "Cargo.toml")
-        shutil.copy(ROOT / "Cargo.lock", tree / "Cargo.lock")
-        source = tree / "src" / file
-        text = source.read_text()
-        if text.count(old) != 1:
-            print(f"{name}: the fault's text is in {file} {text.count(old)} times, not once")
-            return 2
-        source.write_text(text.replace(old, new))
-        build = run(["cargo", "build", "--release", "-q", "--manifest-path", str(tree / "Cargo.toml"),
-                     "--target-dir", str(target)])
-        if build.returncode:
-            print(f"{name}: does not build\n{build.stderr[-800:]}")
+        tree = plant(name, file, old, new)
+        if tree is None:
             return 2
         caught = []
         for label, method in ORDER:
