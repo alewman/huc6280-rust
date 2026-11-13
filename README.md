@@ -35,10 +35,10 @@ Results (details under "How it is proven"):
 | 5 | MAME 0.285 traces of six games replayed; a synthetic program by digest | 6 of 6 reports and digests identical (21,013,980 instructions); synthetic digests identical |
 | 6 | Seeded faults | 24 caught, 0 missed |
 
-Rungs 1 and 3 and `cargo test` were re-run on 2026-11-13 with the same
-results; the others are the certification runs of 2026-11-12 at `7f49bf8`
-(the core has not changed since; this pass touched documentation, CI, a doc
-comment and one test tool's sort). **Nothing here was run on a real
+Rungs 1, 3, 4 and 5 (with the six MAME traces) and `cargo test` were re-run
+on 2026-11-13 with the same results; rungs 2 and 6 are the certification runs
+of 2026-11-12 at `7f49bf8` (the core has not changed since; the publication
+commits touched documentation, a doc comment and one test tool's sort). **Nothing here was run on a real
 console**, and there is no hardware-captured per-instruction data or die model
 of this chip: the reference's judges are emulator tier, and this crate is
 proven equal to the reference, not to the chip. Not covered: the reference's
