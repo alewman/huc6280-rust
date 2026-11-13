@@ -336,10 +336,12 @@ def main() -> int:
     # A file may hold a list of scenarios, run one after another: one file a line and mode.
     span = range(40, 200, 4 if args.quick else 1)
     for poll in ("second_to_last", "last", "mednafen"):
-        for name, action in changes.items():
-            scenarios[f"sweep-{poll}-{name}"] = [
-                sweep(access, action, {"irq_poll_cycle": poll}) for access in span
-            ]
+        for vanished in ("mesen2", "latched"):
+            switches = {"irq_poll_cycle": poll, "vanished_interrupt": vanished}
+            for name, action in changes.items():
+                scenarios[f"sweep-{poll}-{vanished}-{name}"] = [
+                    sweep(access, action, switches) for access in span
+                ]
 
     for name, scenario in scenarios.items():
         (args.out / f"{name}.json").write_text(json.dumps(scenario, separators=(",", ":")))
