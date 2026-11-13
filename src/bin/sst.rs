@@ -256,7 +256,7 @@ struct Problem {
 }
 
 fn physical(mpr: &[u8; 8], logical: u16) -> u32 {
-    (mpr[(logical >> 13) as usize] as u32) << 13 | (logical & 0x1FFF) as u32
+    ((mpr[(logical >> 13) as usize] as u32) << 13) | (logical & 0x1FFF) as u32
 }
 
 /// TMA #$00 returns the hidden latch: the operand byte is the case's second code byte.

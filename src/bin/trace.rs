@@ -299,7 +299,7 @@ fn run(scenario: &Scenario, out: &mut impl Write) {
             for event in actions {
                 match event.action.as_str() {
                     "restore" => {
-                        // A state captured and restored at a boundary changes nothing.
+                        // Capture and restore at this boundary, as the reference's script does.
                         let state = cpu.capture_state();
                         cpu.restore_state(&state).expect("restore");
                     }

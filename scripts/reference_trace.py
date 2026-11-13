@@ -44,7 +44,7 @@ def act(cpu: HuC6280, event: dict) -> None:
     elif action == "reset":
         cpu.request_reset()
     elif action == "restore":
-        # A state captured and restored at a boundary changes nothing.
+        # Capture and restore at this boundary, as src/bin/trace.rs does.
         cpu.restore_state(cpu.capture_state())
     elif action == "set":
         set_registers(cpu, event["registers"])

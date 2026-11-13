@@ -23,13 +23,13 @@ impl<B: Bus> HuC6280<B> {
 
     fn rol(&mut self, value: u8) -> u8 {
         self.shifted(
-            value << 1 | self.p & C,
+            (value << 1) | (self.p & C),
             if value & 0x80 != 0 { C } else { 0 },
         )
     }
 
     fn ror(&mut self, value: u8) -> u8 {
-        self.shifted(value >> 1 | (self.p & C) << 7, value & C)
+        self.shifted((value >> 1) | ((self.p & C) << 7), value & C)
     }
 
     fn inc(&mut self, value: u8) -> u8 {

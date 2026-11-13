@@ -97,7 +97,7 @@ impl<B: Bus> HuC6280<B> {
             return;
         }
         let mut chosen = (0..8)
-            .filter(|bit| mask >> bit & 1 != 0)
+            .filter(|bit| (mask >> bit) & 1 != 0)
             .map(|bit| self.mpr[bit]);
         let value = match self.tma_multiple {
             TmaMultiple::Or => chosen.fold(0, |value, register| value | register),
@@ -118,9 +118,9 @@ impl<B: Bus> HuC6280<B> {
             return; // U11: a mask of $00 writes nothing and leaves the latch alone
         }
         self.mpr_latch = self.a;
-        for bit in 0..8 {
-            if mask >> bit & 1 != 0 {
-                self.mpr[bit] = self.a;
+        for (bit, register) in self.mpr.iter_mut().enumerate() {
+            if (mask >> bit) & 1 != 0 {
+                *register = self.a;
             }
         }
     }

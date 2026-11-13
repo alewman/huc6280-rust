@@ -53,7 +53,7 @@ fn main() {
     cpu.pc = start;
     cpu.s = 0xFF;
     cpu.p = 0x04;
-    let test_case = |cpu: &HuC6280<Ram>| cpu.bus.0[(BANK[0] as usize) << 13 | 0x202];
+    let test_case = |cpu: &HuC6280<Ram>| cpu.bus.0[((BANK[0] as usize) << 13) | 0x202];
     let began = std::time::Instant::now();
     let mut instructions = 0u64;
     let mut reason = "limit";

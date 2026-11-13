@@ -272,7 +272,7 @@ def fuzz(seed: int, steps: int, switches: dict, accesses_per_step: float = 9.0) 
             events.append({"step": step, "action": "nmi"})
         elif roll < 0.019:
             events.append({"step": step, "action": "reset"})
-        elif roll < 0.030:
+        elif roll < 0.060:
             events.append({"step": step, "action": "restore"})
     return {
         "memory": workout(), "board": True, "registers": {"mpr": RESET_MPR}, "reset": True,

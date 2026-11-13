@@ -18,6 +18,7 @@ from huc6280 import HuC6280
 
 MASK = 0xFFFFFFFFFFFFFFFF
 PRIME = 0x100000001B3
+KINDS = {"read": 1, "write": 2, "dummy": 3, "idle": 4}
 BLOCK = frozenset((0x73, 0xC3, 0xD3, 0xE3, 0xF3))
 ALTERNATE = {
     "decimal_formula": "mesen", "sbc_honours_t": True, "tsb_z_from_test": True,
@@ -49,23 +50,27 @@ class Noise:
             if not (roll >> 14) & 0x3FF:
                 cpu.request_reset()
 
+    def seen(self) -> int:
+        """What a callback can see of the CPU: the cycle's kind, the clock switch, the opcode."""
+        cpu = self.cpu
+        return KINDS[cpu.kind] << 32 | int(cpu.high_speed) << 36 | cpu.opcode << 40
+
     def read_byte(self, address: int) -> int:
         self.tick()
         self.state = state = (self.state * 6364136223846793005 + 1442695040888963407) & MASK
         value = state >> 56
         if value in BLOCK and (state >> 48) & 0x3F:
             value ^= 0x01
-        self.digest = ((self.digest ^ (1 << 32 | address << 8 | value)) * PRIME) & MASK
+        self.digest = ((self.digest ^ (self.seen() | address << 8 | value)) * PRIME) & MASK
         return value
 
     def write_byte(self, address: int, value: int) -> None:
         self.tick()
-        self.digest = ((self.digest ^ (2 << 32 | address << 8 | value)) * PRIME) & MASK
+        self.digest = ((self.digest ^ (self.seen() | address << 8 | value)) * PRIME) & MASK
 
     def idle(self, address: int | None) -> None:
         self.tick()
-        word = 4 << 32 if address is None else 3 << 32 | address << 8
-        self.digest = ((self.digest ^ word) * PRIME) & MASK
+        self.digest = ((self.digest ^ (self.seen() | (address or 0) << 8)) * PRIME) & MASK
 
 
 def tri(value: bool | None) -> int:

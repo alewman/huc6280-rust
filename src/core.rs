@@ -286,7 +286,7 @@ impl<B: Bus> HuC6280<B> {
     /// The 21-bit physical address of a 16-bit logical one (HW HB-7).
     #[inline]
     pub fn physical(&self, address: u16) -> u32 {
-        (self.mpr[(address >> 13) as usize] as u32) << 13 | (address & 0x1FFF) as u32
+        ((self.mpr[(address >> 13) as usize] as u32) << 13) | (address & 0x1FFF) as u32
     }
 
     // -- cycles ----------------------------------------------------------
@@ -354,7 +354,7 @@ impl<B: Bus> HuC6280<B> {
 
     pub(crate) fn fetch_word(&mut self) -> u16 {
         let low = self.fetch() as u16;
-        (self.fetch() as u16) << 8 | low
+        ((self.fetch() as u16) << 8) | low
     }
 
     // -- operands --------------------------------------------------------
@@ -460,7 +460,7 @@ impl<B: Bus> HuC6280<B> {
         } else {
             zp as u16 + 1
         };
-        (self.cycle_read(ZERO_PAGE + high_zp) as u16) << 8 | low
+        ((self.cycle_read(ZERO_PAGE + high_zp) as u16) << 8) | low
     }
 
     /// `(zp,X)`: the index is added before the pointer is read.

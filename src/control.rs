@@ -201,7 +201,7 @@ impl<B: Bus> HuC6280<B> {
         // U9: the high byte is at address + 1 even across a page; no NMOS bug
         // (pcetech 2.0).
         let low = self.cycle_read(address) as u16;
-        (self.cycle_read(address.wrapping_add(1)) as u16) << 8 | low
+        ((self.cycle_read(address.wrapping_add(1)) as u16) << 8) | low
     }
 
     /// JMP -- (abs): the pointer's address, then the word there -> PC (SW SB-51).
@@ -227,7 +227,7 @@ impl<B: Bus> HuC6280<B> {
         let pc = self.pc; // the high byte's address, the last byte of JSR (U20)
         self.push((pc >> 8) as u8);
         self.push(pc as u8);
-        self.pc = (self.fetch() as u16) << 8 | low;
+        self.pc = ((self.fetch() as u16) << 8) | low;
         self.io();
     }
 
@@ -250,7 +250,7 @@ impl<B: Bus> HuC6280<B> {
         self.implied();
         self.io();
         let low = self.pull() as u16;
-        let pc = (self.pull() as u16) << 8 | low;
+        let pc = ((self.pull() as u16) << 8) | low;
         self.io();
         self.io();
         self.pc = pc.wrapping_add(1);
@@ -262,7 +262,7 @@ impl<B: Bus> HuC6280<B> {
         self.io();
         self.p = self.pull() & !B; // U20: P first, then PCL, PCH; B is not stored (U5)
         let low = self.pull() as u16;
-        self.pc = (self.pull() as u16) << 8 | low;
+        self.pc = ((self.pull() as u16) << 8) | low;
         self.io();
     }
 
@@ -399,7 +399,7 @@ impl<B: Bus> HuC6280<B> {
         // HW HB-14, pcetech 2.0: the entry sets I and clears D, and clears T.
         self.p = (self.p | I) & !(D | T);
         let low = self.cycle_read(vector) as u16;
-        self.pc = (self.cycle_read(vector + 1) as u16) << 8 | low;
+        self.pc = ((self.cycle_read(vector + 1) as u16) << 8) | low;
     }
 
     /// Take NMI or the highest-priority enabled maskable source at a boundary.
@@ -524,7 +524,7 @@ impl<B: Bus> HuC6280<B> {
             self.io();
         }
         let low = self.cycle_read(VECTOR_RESET) as u16;
-        self.pc = (self.cycle_read(VECTOR_RESET + 1) as u16) << 8 | low;
+        self.pc = ((self.cycle_read(VECTOR_RESET + 1) as u16) << 8) | low;
         self.pins.sync_irq();
         self.pins.frame.polled = Some(NO_POLL);
         self.pins.frame.deferred = None;

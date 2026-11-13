@@ -9,7 +9,7 @@ use crate::dispatch::Mode;
 
 impl<B: Bus> HuC6280<B> {
     fn bit_mask(&self) -> u8 {
-        1 << (self.pins.opcode >> 4 & 7)
+        1 << ((self.pins.opcode >> 4) & 7)
     }
 
     fn bit_branch(&mut self, branch_if_set: bool) {

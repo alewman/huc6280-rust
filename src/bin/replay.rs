@@ -24,7 +24,12 @@ use huc6280::{Bus, HuC6280, Pins};
 const HARDWARE_PAGE: u32 = 0x1FE000; // physical; offsets $0000-$1FFF within it
 const VDC_VCE_MASK: u32 = 0x1FF800; // (address & mask) == $1FE000: VDC and VCE
 const B_FLAG: u8 = 0x10;
-const VECTORS: [(&str, u16); 4] = [("irq2", 0xFFF6), ("irq1", 0xFFF8), ("tiq", 0xFFFA), ("nmi", 0xFFFC)];
+const VECTORS: [(&str, u16); 4] = [
+    ("irq2", 0xFFF6),
+    ("irq1", 0xFFF8),
+    ("tiq", 0xFFFA),
+    ("nmi", 0xFFFC),
+];
 const BLOCK_OPCODES: [u8; 5] = [0x73, 0xC3, 0xD3, 0xE3, 0xF3];
 const REGISTERS: [&str; 6] = ["pc", "a", "x", "y", "s", "p"];
 
@@ -75,7 +80,12 @@ impl<R: BufRead> Iterator for Log<R> {
         }
         loop {
             self.raw.clear();
-            if self.input.read_until(b'\n', &mut self.raw).expect("read the log") == 0 {
+            if self
+                .input
+                .read_until(b'\n', &mut self.raw)
+                .expect("read the log")
+                == 0
+            {
                 self.done = true;
                 let registers = self.registers.take()?;
                 return Some(Line {
@@ -128,7 +138,9 @@ impl<R: BufRead> Iterator for Log<R> {
                         None => valid = false,
                     }
                 }
-                let cycles = std::str::from_utf8(fields[6]).ok().and_then(|text| text.parse::<i64>().ok());
+                let cycles = std::str::from_utf8(fields[6])
+                    .ok()
+                    .and_then(|text| text.parse::<i64>().ok());
                 self.head = match (valid, cycles) {
                     (true, Some(cycles)) => Some((head, cycles)),
                     _ => None,
@@ -167,7 +179,9 @@ impl Board {
         let banks = rom.len() / 0x2000;
         let offsets = bank_offsets(banks);
         let rom_banks = if banks != 0 {
-            (0..0x80).map(|page| (offsets[page >> 4] + (page & 0x0F)) % banks).collect()
+            (0..0x80)
+                .map(|page| (offsets[page >> 4] + (page & 0x0F)) % banks)
+                .collect()
         } else {
             Vec::new()
         };
@@ -202,7 +216,7 @@ impl Board {
                 return 0xFF;
             }
             let bank = self.rom_banks[page as usize];
-            return self.rom[bank << 13 | (address & 0x1FFF) as usize];
+            return self.rom[(bank << 13) | (address & 0x1FFF) as usize];
         }
         if (0xF8..=0xFB).contains(&page) {
             return self.ram[address as usize & 0x1FFF];
@@ -335,7 +349,10 @@ fn or_else(text: String, fallback: &str) -> String {
 fn named(counter: &Counter<&'static str>) -> String {
     let mut items = counter.0.clone();
     items.sort();
-    let parts: Vec<String> = items.iter().map(|(k, v)| format!("{k} {}", commas(*v))).collect();
+    let parts: Vec<String> = items
+        .iter()
+        .map(|(k, v)| format!("{k} {}", commas(*v)))
+        .collect();
     or_else(parts.join(", "), "none")
 }
 
@@ -345,7 +362,10 @@ impl Report {
         let compared = self.cycles_equal + unexplained;
         let mut entries = self.entry_differences.0.clone();
         entries.sort();
-        let entries: Vec<String> = entries.iter().map(|(d, n)| format!("{d:+} x{}", commas(*n))).collect();
+        let entries: Vec<String> = entries
+            .iter()
+            .map(|(d, n)| format!("{d:+} x{}", commas(*n)))
+            .collect();
         let mut lines = vec![
             format!(
                 "instructions {}; interrupts taken {}; taken a boundary earlier than the core's poll would: {}",
@@ -382,7 +402,10 @@ impl Report {
                 .map(|((_, d), n)| (*d, *n))
                 .collect();
             deltas.sort();
-            let text: Vec<String> = deltas.iter().map(|(d, n)| format!("{d:+} x{}", commas(*n))).collect();
+            let text: Vec<String> = deltas
+                .iter()
+                .map(|(d, n)| format!("{d:+} x{}", commas(*n)))
+                .collect();
             lines.push(format!(
                 "  opcode {opcode:02X}: {} differ (MAME - core: {})",
                 commas(count),
@@ -485,14 +508,19 @@ impl Replay {
     }
 
     /// If MAME's next line is an interrupt handler's first instruction, step the entry.
-    fn take_interrupt(&mut self, line: &Line, report: &mut Report, previous: u8) -> Option<&'static str> {
+    fn take_interrupt(
+        &mut self,
+        line: &Line,
+        report: &mut Report,
+        previous: u8,
+    ) -> Option<&'static str> {
         if line.registers[4] != self.cpu.s.wrapping_sub(3) as u32 {
             return None;
         }
         let mut found = None;
         for (name, vector) in VECTORS {
-            let target =
-                self.peek_logical(vector) as u32 | (self.peek_logical(vector.wrapping_add(1)) as u32) << 8;
+            let target = self.peek_logical(vector) as u32
+                | ((self.peek_logical(vector.wrapping_add(1)) as u32) << 8);
             if target == line.registers[0] {
                 found = Some(name);
                 break;
@@ -502,7 +530,8 @@ impl Replay {
         if name == "nmi" {
             self.cpu.request_non_maskable_interrupt();
         } else {
-            self.cpu.set_irq_lines(name == "irq1", name == "irq2", name == "tiq");
+            self.cpu
+                .set_irq_lines(name == "irq1", name == "irq2", name == "tiq");
         }
         if self.cpu.pc as u32 == line.registers[0] {
             return None;
@@ -524,7 +553,12 @@ impl Replay {
     }
 }
 
-fn replay(rom: Vec<u8>, log: &Path, limit: Option<u64>, max_divergences: usize) -> (Report, Replay) {
+fn replay(
+    rom: Vec<u8>,
+    log: &Path,
+    limit: Option<u64>,
+    max_divergences: usize,
+) -> (Report, Replay) {
     let mut report = Report {
         instructions: 0,
         interrupts: Counter::new(),
@@ -577,7 +611,9 @@ fn replay(rom: Vec<u8>, log: &Path, limit: Option<u64>, max_divergences: usize) 
         if let Some((last_opcode, mame, core)) = pending.take() {
             if entered.is_some() {
                 report.cycles_skipped += 1;
-                report.entry_differences.add(mame - core - (entry_clocks / 3) as i64, 1);
+                report
+                    .entry_differences
+                    .add(mame - core - (entry_clocks / 3) as i64, 1);
             } else if mame == core {
                 report.cycles_equal += 1;
             } else {
@@ -678,6 +714,10 @@ fn main() {
     let began = std::time::Instant::now();
     let (report, harness) = replay(rom, &directory.join("error.log"), limit, 50);
     println!("{}", report.summary());
-    println!("digest {:016x} over {} steps", harness.digest, commas(harness.steps));
+    println!(
+        "digest {:016x} over {} steps",
+        harness.digest,
+        commas(harness.steps)
+    );
     eprintln!("{:.3} s", began.elapsed().as_secs_f64());
 }
