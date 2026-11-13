@@ -1,21 +1,58 @@
 # huc6280-rust
 
-A Rust Hudson HuC6280 core (the CPU of the PC Engine, the TurboGrafx-16 and
-the SuperGrafx) transcribed from
-[huc6280-python](https://github.com/alewman/huc6280-python) at `v0.3.0` and
-proven equivalent to it at every processor boundary: boundary kind, cycles,
-every bus cycle in order (address, value, kind), and all of `CPUState`, not
-merely "passes the functional test at the end". The same revision is what
-pcengine-python 0.1.0 pins, so a Rust board can sit on this crate as the
-Python board sits on the Python core.
-
-It builds on [6502-rust](https://github.com/alewman/6502-rust) (crate
-`sixfiveohtwo`) exactly as huc6280-python builds on 6502-python's `CPUFrame`:
-the frame supplies the interrupt requests, the poll and `step()`'s skeleton;
-this crate supplies the HuC6280's four sequences and inherits none of the NMOS
-handlers.
+A Rust **Hudson Soft HuC6280** CPU core (the processor of the PC Engine, the
+TurboGrafx-16, the SuperGrafx and the CD-ROM systems) transcribed from
+[huc6280-python](https://github.com/alewman/huc6280-python) at the tag
+`v0.3.0` (`bf20330`) and proven equivalent to it at every processor boundary:
+boundary kind, cycles, every bus cycle in order (address, value, kind), and
+all of `CPUState`, not merely "passes the functional test at the end". It
+builds on [6502-rust](https://github.com/alewman/6502-rust) (crate
+`sixfiveohtwo`) exactly as huc6280-python builds on 6502-python's
+`CPUFrame`. It is the CPU of the Rust PC Engine board,
+[pcengine-rust](https://github.com/alewman/pcengine-rust), and so of its
+add-ons [supergrafx-rust](https://github.com/alewman/supergrafx-rust) and
+[pcenginecd-rust](https://github.com/alewman/pcenginecd-rust);
+[huc6280-rust-fast](https://github.com/alewman/huc6280-rust-fast) is its
+speed fork. MIT licensed. Built with Claude (Claude Fable 5.2, through Claude
+Code) for alewman, and prepared for publication by Claude Opus 5.5.
 
 The crate is `huc6280` (package `huc6280-rust`).
+
+## Status
+
+**2026-11-13: built (2026-11-12); all six rungs pass.** Every rung compares
+this core with the reference, huc6280-python `v0.3.0`, which is itself judged
+against Hudson's manuals, SingleStepTests, Dormann's test, MAME, Mednafen and
+a VHDL model (its [docs/validation.md](https://github.com/alewman/huc6280-python/blob/main/docs/validation.md)).
+Results (details under "How it is proven"):
+
+| Rung | What | Result |
+| --- | --- | --- |
+| 1 | Directed trace lockstep: every opcode under three sets of switches, dependent sequences, ADC/SBC result tables | 5 of 5 scenarios identical (37,356 boundaries, every cycle); 2,097,152 table entries identical |
+| 2 | SingleStepTests huc6280, all 640,000 cases, verdicts compared case by case | the same counts on both cores, 0 cases judged differently, under both decimal formulas |
+| 3 | Dormann's 65C02 extended opcodes test, relocated | success at `$5675` after 20,936,652 instructions, the reference's line |
+| 4 | Interrupts in lockstep, random and swept, in every poll and vanished-interrupt mode | 65 of 65 identical (925,600 boundaries) |
+| 5 | MAME 0.285 traces of six games replayed; a synthetic program by digest | 6 of 6 reports and digests identical (21,013,980 instructions); synthetic digests identical |
+| 6 | Seeded faults | 24 caught, 0 missed |
+
+Rungs 1 and 3 and `cargo test` were re-run on 2026-11-13 with the same
+results; the others are the certification runs of 2026-11-12 at `7f49bf8`
+(the core has not changed since; this pass touched documentation, CI, a doc
+comment and one test tool's sort). **Nothing here was run on a real
+console**, and there is no hardware-captured per-instruction data or die model
+of this chip: the reference's judges are emulator tier, and this crate is
+proven equal to the reference, not to the chip. Not covered: the reference's
+debugger, console, disassembler and command line (Python-side tooling).
+
+## Using it
+
+```toml
+[dependencies]
+huc6280 = { package = "huc6280-rust", git = "https://github.com/alewman/huc6280-rust", rev = "<commit>" }
+```
+
+(Pin the commit you have checked; the crate is not on crates.io.) Rust 1.85
+or newer.
 
 ```rust
 use huc6280::{Bus, HuC6280, Pins};
@@ -23,20 +60,24 @@ use huc6280::{Bus, HuC6280, Pins};
 struct Board { ram: Vec<u8> /* , the VDC, the timer, ... */ }
 
 impl Bus for Board {
-    fn read(&mut self, address: u32, pins: &mut Pins) -> u8 { self.ram[address as usize] }
+    fn read(&mut self, address: u32, _pins: &mut Pins) -> u8 { self.ram[address as usize] }
     fn write(&mut self, address: u32, value: u8, pins: &mut Pins) {
         if address == 0x1FF402 { pins.set_irq_disable(value); } // the board decodes $1402
         self.ram[address as usize] = value;
     }
-    fn idle(&mut self, address: Option<u32>, pins: &mut Pins) {}
+    fn idle(&mut self, _address: Option<u32>, _pins: &mut Pins) {}
 }
 
 let mut cpu = HuC6280::new(Board { ram: vec![0; 0x200000] });
 cpu.request_reset();
-let cycles = cpu.step(); // 7: the start sequence, one bus call per cycle
+let cycles = cpu.step(); // the start sequence, one bus call per cycle
+assert_eq!(cycles, 7);
 ```
 
-## For a board author
+This example is compiled and run by `cargo test` (as a doctest), as is the
+one in `src/lib.rs`.
+
+### For a board author
 
 - **The bus.** `Bus` has three methods and the core calls exactly one of them
   per CPU cycle, in the chip's order: `read(address, pins) -> u8`,
@@ -97,28 +138,110 @@ let cycles = cpu.step(); // 7: the start sequence, one bus call per cycle
   | `interrupt_entry_cycles` (C3) | `8` | `7` |
 
   The U and C numbers are the entries of huc6280-python's
-  `docs/undocumented-behavior.md`, which says what each is and how well it is
-  known.
+  [`docs/undocumented-behavior.md`](https://github.com/alewman/huc6280-python/blob/main/docs/undocumented-behavior.md),
+  which says what each is and how well it is known.
 
 `tests/core.rs` shows each of these in a few lines.
 
-## Layout
+### Layout
 
 Each `src/*.rs` file is the transcription of one `huc6280/*.py` module, with
 the same handler names, the same 256-row dispatch table (generated from the
 reference's by `scripts/make_dispatch.py`) and the hardware comments carried
 over: `core` (`_core.py`), `alu`, `bits`, `block`, `control`, `hudson`,
-`loads`, `shifts`, `dispatch`, `cpu`, `state`, `trace`. The decimal routines
-are the reference's own (written from a description, its
-`docs/issues/0004`); no emulator's source was opened for this crate.
+`loads`, `shifts`, `dispatch`, `cpu`, `state`, `trace`. A trace written here
+carries each instruction's address and bytes, and the reference's reader
+disassembles them. `src/bin/` holds the rungs' tools (`alu`, `dormann`,
+`long`, `replay`, `sst`, `trace`), among them the part of the reference's
+harness that the MAME replay needs.
 
-Not transcribed: the reference's debugger, console, disassembler, harness and
-command line (Python-side tooling). A trace written here carries each
-instruction's address and bytes, and the reference's reader disassembles
-them. `src/bin/` holds the rungs' tools, among them the part of the
-reference's harness that the MAME replay needs.
+## How it is proven
 
-### Where Rust forced a difference
+| What | Version |
+| --- | --- |
+| huc6280-python (the reference) | tag `v0.3.0`, `bf20330d4ce4e0e126331433bad03f4e4d0e9a2e` (which pins 6502-python at `2146eba`) |
+| 6502-rust (`sixfiveohtwo`) | `71747eb9036702109fb206eb9fe88174a9dcc989`, the pin a2600-rust uses |
+| Trace schema | version 1 (6502-python `docs/trace-schema.md`), with the reference's `HuC6280Record` |
+| SingleStepTests huc6280 | revision `4ce378e04e243437e6f74dfe76c3cb7c70e45bf1` (MIT; Mesen-generated: a detector, not a judge) |
+| Klaus Dormann's 65C02 extended opcodes test | `Klaus2m5/6502_65C02_functional_tests` at `7954e2db`, source SHA-256 `72b1f57d…2f76736`, relocated by the reference's `scripts/dormann_to_ca65.py`, assembled with cc65 2.19 |
+
+Each rung reproduced with the script named, on Linux x86_64, rustc 1.93.1,
+the reference on PyPy 7.3.20 (Python 3.11):
+
+| Rung | What | Result | Script |
+| --- | --- | --- | --- |
+| 1 | Trace lockstep, short: every opcode 40 times under each of three sets of switches (random registers, T and D both ways, random mapping registers, zero-page pointers at `$FF`, TMA/TAM masks of no, one and many bits, block transfers across the edges of the zero-read range and one of 65,536 bytes), and sequences where an instruction depends on the one before (SET or PLP then each T instruction, CLI/SEI/PLP, CSL/CSH); every cycle compared. And ADC's and SBC's whole result tables under both decimal formulas | 5 of 5 scenarios `traces are identical` (37,356 boundaries, 2,796,641 cycles, all 256 opcodes); 2,097,152 table entries identical | `rung1.sh` |
+| 2 | SingleStepTests huc6280, all 640,000 cases, judged as the reference's `tests/single_step.py` judges them, the verdict and the masks of every case compared between the two cores | below: the same counts, 0 cases judged differently | `rung2.sh` |
+| 3 | Dormann's 65C02 extended opcodes test, relocated, natively | `success at $5675 after 20936652 instructions (test case 240)`, the reference's line | `rung3.sh` |
+| 4 | Interrupts in lockstep: a workout (the three lines with their vectors, `irq_disable` written through the bus, NMI, BRK, reset, CLI/SEI/PLP, a handler that acknowledges the timer in its last cycle, SET, a block transfer and CSL/CSH in the main loop) under seeded random line changes, masks, NMIs, resets and state restores between steps and inside bus cycles, in all nine combinations of `irq_poll_cycle` and `vanished_interrupt` and with 7-cycle entries; and one change swept across every cycle of the workout's first 200 | 65 of 65 files `traces are identical`: 925,600 boundaries; in the 29 random runs 61,845 maskable interrupts due (5,709 of them dropped at entry, the instruction running instead), 14,127 NMIs, 625 resets; 5,760 swept scenarios | `rung4.sh` |
+| 5 | A real program: MAME 0.285's traces of six games replayed as the reference's `tests/mame_replay.py` replays them, the report and a digest of the core after every step compared. And a synthetic program on a seeded bus (every cycle, what the pins show in it, and every state folded into a digest) | 6 of 6 reports and digests identical, 21,013,980 instructions; synthetic: 3,000,000 boundaries (196,517,500 cycles) and 1,000,000 with the alternate switches (66,633,861 cycles), digests identical at every checkpoint | `rung5.sh` |
+| 6 | Seeded faults: one single-line fault at a time in a copy of `src/`, run through the rungs cheapest first until one fails; every module has at least one | 24 caught, 0 missed ([docs/seeded-faults.md](docs/seeded-faults.md)) | `rung6.sh` |
+
+**Rung 2, both cores side by side** (`scripts/compare_sst.py`; the masks are
+the reference's readings of the corpus, explained in its
+`tests/single_step.py` and in `src/bin/sst.rs`):
+
+| | Cases | Passed | Failed | `st_write` | `truncated` | `block_unknown` | `block_self_overlap` | `block_final_unexplained` | `tma_latch` | `tsb_z` | `decimal_formula` |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| huc6280-python, default formula | 640,000 | 640,000 | 0 | 7,500 | 12,481 | 11,177 | 5,031 | 16 | 13 | 1,492 | 1,552 |
+| huc6280-rust, default formula | 640,000 | 640,000 | 0 | 7,500 | 12,481 | 11,177 | 5,031 | 16 | 13 | 1,492 | 1,552 |
+| huc6280-python, `mesen` | 640,000 | 640,000 | 0 | 7,500 | 12,481 | 11,177 | 5,031 | 16 | 13 | 1,492 | 0 |
+| huc6280-rust, `mesen` | 640,000 | 640,000 | 0 | 7,500 | 12,481 | 11,177 | 5,031 | 16 | 13 | 1,492 | 0 |
+
+Under each formula all 640,000 verdict lines (index, pass or fail, the masks
+used) are the same on both cores.
+
+**Rung 5** used the MAME traces the reference records (its
+`scripts/mame_trace.py`; large, made from the user's ROMs, never committed):
+Blazing Lazers (USA), Bomberman '94 (Japan), Bonk's Adventure (USA), Final
+Soldier (Japan), Gradius (Japan) and R-Type I (Japan), 3.3 to 3.8 million
+instructions each. The report is the reference's own (Gradius: 3,458,889
+instructions, 234 IRQ1 and 4,555 timer interrupts, 0 register divergences,
+3,454,098 of 3,454,099 instruction lengths equal to MAME's); the rung is that
+the Rust core prints it too. Where the traces are absent (CI) the rung is the
+synthetic program alone.
+
+**Rung 6** caught 9 faults with the SingleStepTests sample, 6 with rung 1, 8
+with rung 4 and 1 with rung 5's synthetic program; fifteen got past the
+SingleStepTests sample, most of them out of that corpus's reach by
+construction (it runs one instruction, with no interrupts, no hardware page
+and no hidden state). The table and the reasoning are in
+[docs/seeded-faults.md](docs/seeded-faults.md).
+
+### Reproducing
+
+```text
+scripts/fetch_huc6280python.sh          # huc6280-python v0.3.0 into external/, with a venv
+scripts/fetch_vectors.sh                # SingleStepTests huc6280 into external/huc6280-sst (185 MB)
+scripts/fetch_dormann.sh                # Dormann's source, where the reference's build looks for it
+scripts/rung1.sh                        # QUICK=1 for the smaller set; JOBS=n parallel scenarios
+scripts/rung2.sh [CORPUS_DIR]           # default external/huc6280-sst/v1; LIMIT=n cases an opcode
+scripts/rung3.sh                        # needs cc65 (ca65, ld65) on the PATH
+scripts/rung4.sh                        # QUICK=1 for the smaller set
+scripts/rung5.sh [TRACES_DIR]           # default ../huc6280-python/tests/mame_traces
+scripts/rung6.sh [CORPUS_DIR]           # after rung3.sh
+cargo test --release                    # the directed tests and the doctests
+```
+
+What each needs: Rust 1.85 or newer; Python 3 for the scripts (standard
+library only); the reference in a venv (PyPy runs rungs 2, 4 and 5 several
+times faster: `PYTHON=/path/to/pypy3 scripts/fetch_huc6280python.sh`; the
+script's default is the author's PyPy, and it falls back to `python3`); cc65
+2.19 for rung 3 (`reference_dormann.py` also looks under `~/.local/opt`, the
+author's layout). Rung 5's MAME traces are made by the reference's
+`scripts/mame_trace.py` from your own ROMs and MAME 0.285, in a checkout of
+huc6280-python beside this one, or anywhere named by `TRACES_DIR`.
+[conformance/README.md](conformance/README.md) describes the lockstep
+scenarios, which `scripts/make_scenarios.py` generates (seeded, so the same
+every time) into `external/`.
+
+CI (`.github/workflows/ci.yml`, main and pull requests) runs `cargo fmt
+--check`, `cargo clippy -D warnings` and `cargo test`, and, against the
+reference fetched from GitHub, rung 2 on a sample of 100 cases an opcode,
+rung 3, rungs 1 and 4 on the quick scenario set and rung 5's synthetic
+program.
+
+## Where Rust forced a difference
 
 Each module's header says so; together:
 
@@ -176,102 +299,7 @@ around `CPUFrame`):
    works as it is; a note in 6502-rust's README that this is the intended
    shape would have saved a decision.
 
-## Certification
-
-| What | Version |
-| --- | --- |
-| huc6280-python (the reference) | tag `v0.3.0`, `bf20330d4ce4e0e126331433bad03f4e4d0e9a2e` (which pins 6502-python at `2146eba`) |
-| 6502-rust (`sixfiveohtwo`) | `71747eb9036702109fb206eb9fe88174a9dcc989`, the pin a2600-rust uses |
-| Trace schema | version 1 (6502-python `docs/trace-schema.md`), with the reference's `HuC6280Record` |
-| SingleStepTests huc6280 | revision `4ce378e04e243437e6f74dfe76c3cb7c70e45bf1` (MIT; Mesen-generated: a detector, not a judge) |
-| Klaus Dormann's 65C02 extended opcodes test | `Klaus2m5/6502_65C02_functional_tests` at `7954e2db`, source SHA-256 `72b1f57d…2f76736`, relocated by the reference's `scripts/dormann_to_ca65.py`, assembled with cc65 2.19 |
-
-Ladder status at this commit, each rung reproduced with the script named, on
-Linux x86_64, rustc 1.93.1, PyPy 7.3.20 (Python 3.11):
-
-| Rung | What | Result | Script |
-| --- | --- | --- | --- |
-| 1 | Trace lockstep, short: every opcode 40 times under each of three sets of switches (random registers, T and D both ways, random mapping registers, zero-page pointers at `$FF`, TMA/TAM masks of no, one and many bits, block transfers across the edges of the zero-read range and one of 65,536 bytes), and sequences where an instruction depends on the one before (SET or PLP then each T instruction, CLI/SEI/PLP, CSL/CSH); every cycle compared. And ADC's and SBC's whole result tables under both decimal formulas | 5 of 5 scenarios `traces are identical` (37,356 boundaries, 2,796,641 cycles, all 256 opcodes); 2,097,152 table entries identical | `rung1.sh` |
-| 2 | SingleStepTests huc6280, all 640,000 cases, judged as the reference's `tests/single_step.py` judges them, the verdict and the masks of every case compared between the two cores | see below: the same counts, 0 cases judged differently | `rung2.sh` |
-| 3 | Dormann's 65C02 extended opcodes test, relocated, natively | `success at $5675 after 20936652 instructions (test case 240)`, the reference's line | `rung3.sh` |
-| 4 | Interrupts in lockstep: a workout (the three lines with their vectors, `irq_disable` written through the bus, NMI, BRK, reset, CLI/SEI/PLP, a handler that acknowledges the timer in its last cycle, SET, a block transfer and CSL/CSH in the main loop) under seeded random line changes, masks, NMIs, resets and state restores between steps and inside bus cycles, in all nine combinations of `irq_poll_cycle` and `vanished_interrupt` and with 7-cycle entries; and one change swept across every cycle of the workout's first 200 | 65 of 65 files `traces are identical`: 925,600 boundaries; in the 29 random runs 61,845 maskable interrupts due (5,709 of them dropped at entry, the instruction running instead), 14,127 NMIs, 625 resets; 5,760 swept scenarios | `rung4.sh` |
-| 5 | A real program: MAME 0.285's traces of six games replayed as the reference's `tests/mame_replay.py` replays them, the report and a digest of the core after every step compared. And a synthetic program on a seeded bus (every cycle, what the pins show in it, and every state folded into a digest) | 6 of 6 reports and digests identical, 21,013,980 instructions; synthetic: 3,000,000 boundaries (196,517,500 cycles) and 1,000,000 with the alternate switches (66,633,861 cycles), digests identical at every checkpoint | `rung5.sh` |
-| 6 | Seeded faults | 24 caught, 0 missed (below) | `rung6.sh` |
-
-**Rung 2, both cores side by side** (`scripts/compare_sst.py`; the masks are
-the reference's readings of the corpus, explained in its
-`tests/single_step.py` and in `src/bin/sst.rs`):
-
-| | Cases | Passed | Failed | `st_write` | `truncated` | `block_unknown` | `block_self_overlap` | `block_final_unexplained` | `tma_latch` | `tsb_z` | `decimal_formula` |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| huc6280-python, default formula | 640,000 | 640,000 | 0 | 7,500 | 12,481 | 11,177 | 5,031 | 16 | 13 | 1,492 | 1,552 |
-| huc6280-rust, default formula | 640,000 | 640,000 | 0 | 7,500 | 12,481 | 11,177 | 5,031 | 16 | 13 | 1,492 | 1,552 |
-| huc6280-python, `mesen` | 640,000 | 640,000 | 0 | 7,500 | 12,481 | 11,177 | 5,031 | 16 | 13 | 1,492 | 0 |
-| huc6280-rust, `mesen` | 640,000 | 640,000 | 0 | 7,500 | 12,481 | 11,177 | 5,031 | 16 | 13 | 1,492 | 0 |
-
-Under each formula all 640,000 verdict lines (index, pass or fail, the masks
-used) are the same on both cores.
-
-**Rung 5** used the MAME traces (the reference's `tests/mame_traces/`, large
-and not in git): Blazing Lazers (USA), Bomberman '94 (Japan), Bonk's
-Adventure (USA), Final Soldier (Japan), Gradius (Japan) and R-Type I (Japan),
-3.3 to 3.8 million instructions each. The report is the reference's own
-(Gradius: 3,458,889 instructions, 234 IRQ1 and 4,555 timer interrupts, 0
-register divergences, 3,454,098 of 3,454,099 instruction lengths equal to
-MAME's); the rung is that the Rust core prints it too. Where the traces are
-absent (CI) the rung is the synthetic program alone.
-
-**Rung 6, seeded faults** (`scripts/seeded_faults.py`): one single-line fault
-at a time is planted in a copy of `src/`, built, and run through the rungs
-cheapest first (the SingleStepTests sample of 100 cases an opcode with the
-verdicts compared, Dormann, then rungs 1, 4 and 5 on the quick scenario set)
-until one fails. Every module has at least one.
-
-| Fault | Module | What it changes | Caught by |
-| --- | --- | --- | --- |
-| `pointer-leaves-zero-page` | `core.rs` | a zero-page pointer at $FF takes its high byte from $2100 (U8's other reading) | rung 2 (SingleStepTests sample) |
-| `mednafen-adds-as-mesen` | `alu.rs` | the default decimal formula carries as Mesen's does (differs for invalid digits only) | rung 2 (SingleStepTests sample) |
-| `decimal-touches-v` | `alu.rs` | decimal mode clears V as binary mode does (U14 says it is left alone) | rung 2 (SingleStepTests sample) |
-| `memory-mode-keeps-a` | `alu.rs` | T mode writes the result to A as well | rung 2 (SingleStepTests sample) |
-| `trb-z-from-test` | `bits.rs` | TRB's Z from the 65C02's test, not the result (C12 the other way) | rung 2 (SingleStepTests sample) |
-| `zero-read-ends-early` | `block.rs` | the zero-read range ends at $13FF, pcetech's stated "$1400" (C9) | rung 1 (directed lockstep) |
-| `block-length-zero` | `block.rs` | a length of 0 moves nothing instead of 65,536 bytes | rung 1 (directed lockstep) |
-| `cli-no-delay` | `control.rs` | CLI's new I counts at once (U21) | rung 1 (directed lockstep) |
-| `vanished-timer-taken` | `control.rs` | a timer interrupt whose source has gone is entered anyway (C18) | rung 4 (interrupt lockstep) |
-| `lines-before-every-change` | `control.rs` | every change of the lines moves lines_before, not only the first since an access | rung 4 (interrupt lockstep) |
-| `mednafen-timer-sampled` | `control.rs` | irq_poll_cycle = Mednafen samples the timer like the other two lines | rung 4 (interrupt lockstep) |
-| `reset-keeps-speed` | `control.rs` | reset leaves the clock switch as it was (U10) | rung 4 (interrupt lockstep) |
-| `entry-polls` | `control.rs` | an interrupt entry polls like an instruction | rung 4 (interrupt lockstep) |
-| `st-through-mapper` | `hudson.rs` | ST0-ST2 write through the mapper (U12) | rung 1 (directed lockstep) |
-| `speed-after-last-cycle` | `hudson.rs` | the new clock speed holds from the next instruction, not the last cycle (C7, MAME's way) | rung 5 (synthetic program) |
-| `tam-zero-latches` | `hudson.rs` | TAM with a mask of $00 still loads the latch (U11) | rung 1 (directed lockstep) |
-| `txs-sets-flags` | `loads.rs` | TXS sets N and Z like the other transfers | rung 2 (SingleStepTests sample) |
-| `ror-carry-out` | `shifts.rs` | ROR takes its carry out from bit 7 | rung 2 (SingleStepTests sample) |
-| `tst-form` | `dispatch.rs` | TST zp is given two bytes (the trace's instruction bytes; the core never reads the form) | rung 1 (directed lockstep) |
-| `e2-is-cla` | `dispatch.rs` | the undefined opcode $E2 runs CLA | rung 2 (SingleStepTests sample) |
-| `t-survives-fetch` | `cpu.rs` | T is not cleared by the fetch (U4) | rung 2 (SingleStepTests sample) |
-| `restore-crosses-lines` | `cpu.rs` | restore_state crosses IRQ1 and IRQ2 | rung 4 (interrupt lockstep) |
-| `restore-forgets-poll` | `state.rs` | a restored state forgets what the poll saw of the IRQ line | rung 4 (interrupt lockstep) |
-| `boundary-priority` | `trace.rs` | the boundary a trace names puts IRQ1 above the timer | rung 4 (interrupt lockstep) |
-
-**24 caught, 0 missed**: 9 by the SingleStepTests sample, 6 by rung 1, 8 by
-rung 4, 1 by rung 5. Fifteen got past the SingleStepTests sample, most of
-them out of that corpus's reach by construction (it runs one instruction, with
-no interrupts, no hardware page and no hidden state): the zero-read range,
-`ST0`'s address (which the corpus masks), the TAM latch, the trace's own
-instruction bytes, everything about the poll and the lines, and `CSH`'s last
-cycle, which no trace records: the synthetic program catches it, because its
-bus folds `pins.high_speed` into the digest in every cycle (the MAME replay's
-harness counts master clocks from it too, but the replay is not among the
-checks the fault runner makes).
-Dormann's test is second in the order and caught nothing first.
-
-CI (`.github/workflows/ci.yml`) runs `cargo fmt --check`, `cargo clippy -D
-warnings` and `cargo test`, and against the reference rung 2 on a sample of
-100 cases an opcode, rung 3, rungs 1 and 4 on the quick scenario set and rung
-5's synthetic program, on every push to main and every pull request.
-
-### Speed
+## Speed
 
 Klaus Dormann's relocated test (20,936,652 instructions on flat RAM, no
 tracing), one core of a busy 32-thread machine, best of five:
@@ -284,17 +312,19 @@ tracing), one core of a busy 32-thread machine, best of five:
 
 About 6.5 times the reference at its best and 20 times a fresh run of it. A
 MAME replay (Gradius, 3,458,889 instructions, reading the 160 MB log
-included) takes 2.1 s here and 19.8 s on the reference. This crate is
-the plain transcription: correct first, and the place to measure a speed fork
+included) takes 2.1 s here and 19.8 s on the reference. This crate is the
+plain transcription: correct first, and the place to measure a speed fork
 against.
 
-### Notes on the reference
+## Notes on the reference
 
 Nothing found here is a divergence: the Rust core does what huc6280-python
 v0.3.0 does in each case (rung 4 runs through all of them). They are places
 where the reference's behaviour looked unintended while it was being
-transcribed, left for its maintainers; `scripts/reference_notes.py` shows
-the first three on the reference itself in a few lines each:
+transcribed, filed in huc6280-python as
+[issue 0005](https://github.com/alewman/huc6280-python/blob/main/docs/issues/0005-interrupt-edge-cases-found-by-the-rust-port.md)
+(open, nothing changed); `scripts/reference_notes.py` shows the first three
+on the reference itself in a few lines each:
 
 1. **A vanished interrupt's instruction skips the last-cycle rule.** When an
    entry finds its source gone, `_enter_interrupt` runs the instruction and
@@ -309,34 +339,32 @@ the first three on the reference itself in a few lines each:
    `_lines_before` (which lines the poll saw) is not in `CPUState`; a state
    captured after a line dropped in the last cycle and restored takes a
    different decision from the run it was captured from (IRQ1 up, dropped in
-   the last cycle: entered without the restore, not entered with it).
+   the last cycle: entered without the restore, not entered with it). This
+   crate's `CpuState` has the same gap, so a board's save state taken at such
+   a boundary continues differently, as the reference's does.
 4. `CPUState`'s docstring says BRK does not poll; `_op_brk` leaves the poll
    as any instruction's (only entries and reset set `NO_POLL`).
 5. In the test tooling, `tests/mame_replay.py`'s `_take_interrupt` returns
    early with the line it has just asserted still asserted when the core's
    PC is already at the handler.
 
-### Reproducing
+## Provenance
 
-```text
-scripts/fetch_huc6280python.sh          # huc6280-python v0.3.0 into external/, with a PyPy venv
-scripts/fetch_vectors.sh                # SingleStepTests huc6280 into external/huc6280-sst (185 MB)
-scripts/fetch_dormann.sh                # Dormann's source, where the reference's build looks for it
-scripts/rung1.sh
-scripts/rung2.sh [CORPUS_DIR]           # default external/huc6280-sst/v1
-scripts/rung3.sh                        # needs cc65 (ca65, ld65)
-scripts/rung4.sh
-scripts/rung5.sh [TRACES_DIR]           # default ../huc6280-python/tests/mame_traces
-scripts/rung6.sh [CORPUS_DIR]           # after rung3.sh
-```
+No GPL or LGPL source was copied, read or transcribed for this crate. The
+only source transcribed is huc6280-python, which is ours and MIT; its decimal
+routines were rewritten from a description in words before `v0.3.0` (its
+CHANGELOG), and its tree is checked for copied or transcribed emulator code by
+pcengine-python's `scripts/provenance_check.py`
+([docs/provenance.md](https://github.com/alewman/pcengine-python/blob/main/docs/provenance.md)).
+Emulators are named in the comments as the reference names them: as the
+sources of a reading, not of code. Dormann's test (GPL-3.0, a test program)
+is fetched and built in the reference's checkout by its own scripts; it is
+not in this repository.
 
-`conformance/README.md` describes the lockstep scenarios.
-`docs/handoff-brief.md` is the brief this was built from, with what was built
-appended.
+[docs/handoff-brief.md](docs/handoff-brief.md) is the brief this crate was
+built from, kept as written, with what was built appended.
 
 ## Licence
 
-MIT (see `LICENSE`). Nothing third-party is committed: the vectors, Dormann's
-test and the MAME traces are fetched or read in place. No GPL or LGPL source
-was read or transcribed for this crate; the only source transcribed is
-huc6280-python, which is ours.
+MIT (see [LICENSE](LICENSE)). Nothing third-party is committed: the vectors,
+Dormann's test and the MAME traces are fetched or read in place.
