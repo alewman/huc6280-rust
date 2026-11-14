@@ -1,9 +1,10 @@
 # Seeded faults (rung 6)
 
 A gate that cannot fail proves nothing. This is the record of the run that
-certified the crate (2026-11-12, at `7f49bf8`; the core has not changed
-since): each fault, the module it is in, what it changes, and the first
-check that caught it.
+certified the crate against huc6280-python `v0.4.0` (2026-11-13, issue 0005
+carried; the first certification, 2026-11-12 at `7f49bf8` against `v0.3.0`,
+had the first 24 with the same results): each fault, the module it is in, what
+it changes, and the first check that caught it.
 
 `scripts/seeded_faults.py` (rung 6, `scripts/rung6.sh`): one single-line fault
 at a time is planted in a copy of `src/`, built, and run through the rungs
@@ -22,10 +23,15 @@ until one fails. Every module has at least one.
 | `block-length-zero` | `block.rs` | a length of 0 moves nothing instead of 65,536 bytes | rung 1 (directed lockstep) |
 | `cli-no-delay` | `control.rs` | CLI's new I counts at once (U21) | rung 1 (directed lockstep) |
 | `vanished-timer-taken` | `control.rs` | a timer interrupt whose source has gone is entered anyway (C18) | rung 4 (interrupt lockstep) |
-| `lines-before-every-change` | `control.rs` | every change of the lines moves lines_before, not only the first since an access | rung 4 (interrupt lockstep) |
+| `polled-lines-ignore-host` | `control.rs` | a line the host changes between steps, after a change the poll missed, does not count for the next boundary (until issue 0005 this fault was `lines-before-every-change`, on the field the polled lines replaced) | rung 4 (interrupt lockstep) |
 | `mednafen-timer-sampled` | `control.rs` | irq_poll_cycle = Mednafen samples the timer like the other two lines | rung 4 (interrupt lockstep) |
 | `reset-keeps-speed` | `control.rs` | reset leaves the clock switch as it was (U10) | rung 4 (interrupt lockstep) |
 | `entry-polls` | `control.rs` | an interrupt entry polls like an instruction | rung 4 (interrupt lockstep) |
+| `vanished-skips-bookkeeping` | `control.rs` | issue 0005 item 1: the instruction a vanished entry runs skips step()'s deferred-to-polled bookkeeping | rung 4 (interrupt lockstep) |
+| `swap-not-watched` | `control.rs` | item 2: a change of the lines that leaves IRQ_LINE as it was does not arm the frame's watch | rung 4 (interrupt lockstep) |
+| `polled-lines-kept` | `control.rs` | the boundary keeps the polled lines instead of using them up | rung 4 (interrupt lockstep) |
+| `reset-keeps-polled-lines` | `control.rs` | reset leaves the lines the last poll saw | rung 4 (interrupt lockstep) |
+| `brk-polls` | `control.rs` | item 4: BRK polls like an instruction | rung 1 (directed lockstep) |
 | `st-through-mapper` | `hudson.rs` | ST0-ST2 write through the mapper (U12) | rung 1 (directed lockstep) |
 | `speed-after-last-cycle` | `hudson.rs` | the new clock speed holds from the next instruction, not the last cycle (C7, MAME's way) | rung 5 (synthetic program) |
 | `tam-zero-latches` | `hudson.rs` | TAM with a mask of $00 still loads the latch (U11) | rung 1 (directed lockstep) |
@@ -34,12 +40,16 @@ until one fails. Every module has at least one.
 | `tst-form` | `dispatch.rs` | TST zp is given two bytes (the trace's instruction bytes; the core never reads the form) | rung 1 (directed lockstep) |
 | `e2-is-cla` | `dispatch.rs` | the undefined opcode $E2 runs CLA | rung 2 (SingleStepTests sample) |
 | `t-survives-fetch` | `cpu.rs` | T is not cleared by the fetch (U4) | rung 2 (SingleStepTests sample) |
+| `polled-lines-never-set` | `cpu.rs` | a line changed after the last access is never remembered as changed after the poll | rung 4 (interrupt lockstep) |
+| `restore-forgets-polled-lines` | `cpu.rs` | item 3: restore_state forgets the lines the poll saw | rung 4 (interrupt lockstep) |
 | `restore-crosses-lines` | `cpu.rs` | restore_state crosses IRQ1 and IRQ2 | rung 4 (interrupt lockstep) |
 | `restore-forgets-poll` | `state.rs` | a restored state forgets what the poll saw of the IRQ line | rung 4 (interrupt lockstep) |
 | `boundary-priority` | `trace.rs` | the boundary a trace names puts IRQ1 above the timer | rung 4 (interrupt lockstep) |
+| `boundary-live-lines` | `trace.rs` | the boundary a trace names goes by the lines as they stand, not as the poll saw them | rung 4 (interrupt lockstep) |
 
-**24 caught, 0 missed**: 9 by the SingleStepTests sample, 6 by rung 1, 8 by
-rung 4, 1 by rung 5. Fifteen got past the SingleStepTests sample, most of
+**32 caught, 0 missed**: 9 by the SingleStepTests sample, 7 by rung 1, 15 by
+rung 4, 1 by rung 5 (the eight issue 0005 faults: seven by rung 4, `brk-polls`
+by rung 1, whose traces record `skipped_poll` in the state after every BRK). Of the first 24, fifteen got past the SingleStepTests sample, most of
 them out of that corpus's reach by construction (it runs one instruction, with
 no interrupts, no hardware page and no hidden state): the zero-read range,
 `ST0`'s address (which the corpus masks), the TAM latch, the trace's own

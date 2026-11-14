@@ -2,8 +2,9 @@
 
 A Rust **Hudson Soft HuC6280** CPU core (the processor of the PC Engine, the
 TurboGrafx-16, the SuperGrafx and the CD-ROM systems) transcribed from
-[huc6280-python](https://github.com/alewman/huc6280-python) at the tag
-`v0.3.0` (`bf20330`) and proven equivalent to it at every processor boundary:
+[huc6280-python](https://github.com/alewman/huc6280-python) (built from the
+tag `v0.3.0`, carried to `v0.4.0`, `265df88`) and proven equivalent to it at
+every processor boundary:
 boundary kind, cycles, every bus cycle in order (address, value, kind), and
 all of `CPUState`, not merely "passes the functional test at the end". It
 builds on [6502-rust](https://github.com/alewman/6502-rust) (crate
@@ -20,8 +21,9 @@ The crate is `huc6280` (package `huc6280-rust`).
 
 ## Status
 
-**2026-11-13: built (2026-11-12); all six rungs pass.** Every rung compares
-this core with the reference, huc6280-python `v0.3.0`, which is itself judged
+**2026-11-13: built (2026-11-12) from huc6280-python `v0.3.0`; carried to
+`v0.4.0` (issue 0005) on 2026-11-13; all six rungs pass against `v0.4.0`.**
+Every rung compares this core with the reference, huc6280-python `v0.4.0`, which is itself judged
 against Hudson's manuals, SingleStepTests, Dormann's test, MAME, Mednafen and
 a VHDL model (its [docs/validation.md](https://github.com/alewman/huc6280-python/blob/main/docs/validation.md)).
 Results (details under "How it is proven"):
@@ -33,12 +35,14 @@ Results (details under "How it is proven"):
 | 3 | Dormann's 65C02 extended opcodes test, relocated | success at `$5675` after 20,936,652 instructions, the reference's line |
 | 4 | Interrupts in lockstep, random and swept, in every poll and vanished-interrupt mode | 65 of 65 identical (925,600 boundaries) |
 | 5 | MAME 0.285 traces of six games replayed; a synthetic program by digest | 6 of 6 reports and digests identical (21,013,980 instructions); synthetic digests identical |
-| 6 | Seeded faults | 24 caught, 0 missed |
+| 6 | Seeded faults | 32 caught, 0 missed (24 inherited, 8 on issue 0005's bookkeeping) |
 
-Rungs 1, 3, 4 and 5 (with the six MAME traces) and `cargo test` were re-run
-on 2026-11-13 with the same results; rungs 2 and 6 are the certification runs
-of 2026-11-12 at `7f49bf8` (the core has not changed since; the publication
-commits touched documentation, a doc comment and one test tool's sort). **Nothing here was run on a real
+Every rung and `cargo test` (17 directed tests, 6 of them issue 0005's,
+mirroring the reference's, among them a capture and restore before every
+step) were run on 2026-11-13 against `v0.4.0` (`265df88`, local; the release
+is not on GitHub yet). Rungs 1 to 3 and the six MAME replays print what they
+printed against `v0.3.0`; the interrupt lockstep and the alternate-switch
+synthetic run moved with the reference, identically on both cores. **Nothing here was run on a real
 console**, and there is no hardware-captured per-instruction data or die model
 of this chip: the reference's judges are emulator tier, and this crate is
 proven equal to the reference, not to the chip. Not covered: the reference's
@@ -120,8 +124,15 @@ one in `src/lib.rs`.
   `cpu.physical(logical)` maps an address. `cpu.bus` is the board.
 - **State.** `cpu.capture_state() -> CpuState` (a `Copy` struct: the
   registers, `mpr`, `high_speed`, `mpr_latch`, the three lines, the disable
-  register and the frame's poll fields) and `cpu.restore_state(&state) ->
-  Result<(), String>`. Memory and devices are the board's.
+  register, the frame's poll fields and `polled_irq_lines`) and
+  `cpu.restore_state(&state) -> Result<(), String>`, which refuses a state
+  the reference's constructor would (`irq_disable` or `polled_irq_lines`
+  above 7, B set). `polled_irq_lines: Option<u8>` (since `v0.4.0` of the
+  reference, issue 0005) is the lines the last poll saw when one changed
+  after it, in the instruction's last cycle, else `None`; a board that
+  serializes `CpuState` gains that one field, and a state saved without it
+  loads as `None`, which is what every state meant before. Memory and devices
+  are the board's.
 - **The named switches** are public fields with the reference's defaults:
 
   | Field | Default | Other values |
@@ -159,7 +170,7 @@ harness that the MAME replay needs.
 
 | What | Version |
 | --- | --- |
-| huc6280-python (the reference) | tag `v0.3.0`, `bf20330d4ce4e0e126331433bad03f4e4d0e9a2e` (which pins 6502-python at `2146eba`) |
+| huc6280-python (the reference) | `v0.4.0`, `265df883bbe1b3fe27077525786c57d580a1edfa` (which pins 6502-python at `2146eba`) |
 | 6502-rust (`sixfiveohtwo`) | `71747eb9036702109fb206eb9fe88174a9dcc989`, the pin a2600-rust uses |
 | Trace schema | version 1 (6502-python `docs/trace-schema.md`), with the reference's `HuC6280Record` |
 | SingleStepTests huc6280 | revision `4ce378e04e243437e6f74dfe76c3cb7c70e45bf1` (MIT; Mesen-generated: a detector, not a judge) |
@@ -173,9 +184,9 @@ the reference on PyPy 7.3.20 (Python 3.11):
 | 1 | Trace lockstep, short: every opcode 40 times under each of three sets of switches (random registers, T and D both ways, random mapping registers, zero-page pointers at `$FF`, TMA/TAM masks of no, one and many bits, block transfers across the edges of the zero-read range and one of 65,536 bytes), and sequences where an instruction depends on the one before (SET or PLP then each T instruction, CLI/SEI/PLP, CSL/CSH); every cycle compared. And ADC's and SBC's whole result tables under both decimal formulas | 5 of 5 scenarios `traces are identical` (37,356 boundaries, 2,796,641 cycles, all 256 opcodes); 2,097,152 table entries identical | `rung1.sh` |
 | 2 | SingleStepTests huc6280, all 640,000 cases, judged as the reference's `tests/single_step.py` judges them, the verdict and the masks of every case compared between the two cores | below: the same counts, 0 cases judged differently | `rung2.sh` |
 | 3 | Dormann's 65C02 extended opcodes test, relocated, natively | `success at $5675 after 20936652 instructions (test case 240)`, the reference's line | `rung3.sh` |
-| 4 | Interrupts in lockstep: a workout (the three lines with their vectors, `irq_disable` written through the bus, NMI, BRK, reset, CLI/SEI/PLP, a handler that acknowledges the timer in its last cycle, SET, a block transfer and CSL/CSH in the main loop) under seeded random line changes, masks, NMIs, resets and state restores between steps and inside bus cycles, in all nine combinations of `irq_poll_cycle` and `vanished_interrupt` and with 7-cycle entries; and one change swept across every cycle of the workout's first 200 | 65 of 65 files `traces are identical`: 925,600 boundaries; in the 29 random runs 61,845 maskable interrupts due (5,709 of them dropped at entry, the instruction running instead), 14,127 NMIs, 625 resets; 5,760 swept scenarios | `rung4.sh` |
-| 5 | A real program: MAME 0.285's traces of six games replayed as the reference's `tests/mame_replay.py` replays them, the report and a digest of the core after every step compared. And a synthetic program on a seeded bus (every cycle, what the pins show in it, and every state folded into a digest) | 6 of 6 reports and digests identical, 21,013,980 instructions; synthetic: 3,000,000 boundaries (196,517,500 cycles) and 1,000,000 with the alternate switches (66,633,861 cycles), digests identical at every checkpoint | `rung5.sh` |
-| 6 | Seeded faults: one single-line fault at a time in a copy of `src/`, run through the rungs cheapest first until one fails; every module has at least one | 24 caught, 0 missed ([docs/seeded-faults.md](docs/seeded-faults.md)) | `rung6.sh` |
+| 4 | Interrupts in lockstep: a workout (the three lines with their vectors, `irq_disable` written through the bus, NMI, BRK, reset, CLI/SEI/PLP, a handler that acknowledges the timer in its last cycle, SET, a block transfer and CSL/CSH in the main loop) under seeded random line changes, masks, NMIs, resets and state restores between steps and inside bus cycles, in all nine combinations of `irq_poll_cycle` and `vanished_interrupt` and with 7-cycle entries; and one change swept across every cycle of the workout's first 200 | 65 of 65 files `traces are identical`: 925,600 boundaries; in the 29 random runs 56,286 boundaries that the trace names maskable entries (by `next_boundary`, which decides as the default switches do; 282 of them, under other switches, ran the instruction instead), 14,113 NMIs, 625 resets (at `v0.3.0`, counted before `next_boundary` followed the polled lines: 61,845 due, 5,709 dropped, 14,127 NMIs); 5,760 swept scenarios | `rung4.sh` |
+| 5 | A real program: MAME 0.285's traces of six games replayed as the reference's `tests/mame_replay.py` replays them, the report and a digest of the core after every step compared. And a synthetic program on a seeded bus (every cycle, what the pins show in it, and every state folded into a digest) | 6 of 6 reports and digests identical, 21,013,980 instructions; synthetic: 3,000,000 boundaries (196,517,500 cycles) and 1,000,000 with the alternate switches (66,666,983 cycles; 66,633,861 at `v0.3.0`), digests identical at every checkpoint | `rung5.sh` |
+| 6 | Seeded faults: one single-line fault at a time in a copy of `src/`, run through the rungs cheapest first until one fails; every module has at least one | 32 caught, 0 missed ([docs/seeded-faults.md](docs/seeded-faults.md)) | `rung6.sh` |
 
 **Rung 2, both cores side by side** (`scripts/compare_sst.py`; the masks are
 the reference's readings of the corpus, explained in its
@@ -201,8 +212,8 @@ instructions, 234 IRQ1 and 4,555 timer interrupts, 0 register divergences,
 the Rust core prints it too. Where the traces are absent (CI) the rung is the
 synthetic program alone.
 
-**Rung 6** caught 9 faults with the SingleStepTests sample, 6 with rung 1, 8
-with rung 4 and 1 with rung 5's synthetic program; fifteen got past the
+**Rung 6** caught 9 faults with the SingleStepTests sample, 7 with rung 1, 15
+with rung 4 and 1 with rung 5's synthetic program; 23 got past the
 SingleStepTests sample, most of them out of that corpus's reach by
 construction (it runs one instruction, with no interrupts, no hardware page
 and no hidden state). The table and the reasoning are in
@@ -211,7 +222,7 @@ and no hidden state). The table and the reasoning are in
 ### Reproducing
 
 ```text
-scripts/fetch_huc6280python.sh          # huc6280-python v0.3.0 into external/, with a venv
+scripts/fetch_huc6280python.sh          # huc6280-python v0.4.0 into external/, with a venv
 scripts/fetch_vectors.sh                # SingleStepTests huc6280 into external/huc6280-sst (185 MB)
 scripts/fetch_dormann.sh                # Dormann's source, where the reference's build looks for it
 scripts/rung1.sh                        # QUICK=1 for the smaller set; JOBS=n parallel scenarios
@@ -235,6 +246,9 @@ huc6280-python beside this one, or anywhere named by `TRACES_DIR`.
 scenarios, which `scripts/make_scenarios.py` generates (seeded, so the same
 every time) into `external/`.
 
+CI's rungs job fetches the reference from GitHub, so it fails until
+huc6280-python `v0.4.0` (`265df88`) is pushed there; until then fetch it
+from a local clone (`scripts/fetch_huc6280python.sh "" /path/to/huc6280-python`).
 CI (`.github/workflows/ci.yml`, main and pull requests) runs `cargo fmt
 --check`, `cargo clippy -D warnings` and `cargo test`, and, against the
 reference fetched from GitHub, rung 2 on a sample of 100 cases an opcode,
@@ -278,17 +292,18 @@ crate works around the frame rather than with it (the reference does the same
 around `CPUFrame`):
 
 1. **Several maskable sources.** The frame has one `IRQ_LINE`. The three
-   lines, their mask and the copy "as the poll saw them" (`lines`,
-   `lines_before`, `poll_lines`) are kept beside it, and `lines_before`
-   repeats by hand the frame's own `deferred` rule (first change since the
-   last access). A frame that carried a part's auxiliary request bits through
-   `deferred` and `polled` would remove all three fields, and the two corners
-   listed under "Notes on the reference" with them.
+   lines, their mask and what the poll saw of them (`lines`,
+   `lines_at_access`, `polled_lines`, `poll_lines`) are kept beside it, and
+   `set_irq_lines` arms the frame's `deferred` watch by hand when a source is
+   swapped for another and `IRQ_LINE` does not change. A frame that carried a
+   part's auxiliary request bits through `deferred` and `polled` would remove
+   all of that.
 2. **An entry that declines.** `Part::step` returns whatever
    `enter_interrupt` returns, so an entry that finds its source gone has to
-   run the instruction itself, past the bookkeeping `step` does after
-   `execute`. `enter_interrupt` returning `Option<u32>` (none: run the
-   instruction) would keep that path the same as any other.
+   run the instruction itself and repeat the bookkeeping `step` does after
+   `execute` (as the reference does since issue 0005). `enter_interrupt`
+   returning `Option<u32>` (none: run the instruction) would keep that path
+   the same as any other.
 3. **The poll point.** `irq_poll_cycle` rewrites the frame's `polled` before
    calling its `boundary_interrupt`. A frame with the poll point as a setting
    (second-to-last cycle or last) would own that.
@@ -318,35 +333,36 @@ against.
 
 ## Notes on the reference
 
-Nothing found here is a divergence: the Rust core does what huc6280-python
-v0.3.0 does in each case (rung 4 runs through all of them). They are places
-where the reference's behaviour looked unintended while it was being
-transcribed, filed in huc6280-python as
-[issue 0005](https://github.com/alewman/huc6280-python/blob/main/docs/issues/0005-interrupt-edge-cases-found-by-the-rust-port.md)
-(open, nothing changed); `scripts/reference_notes.py` shows the first three
-on the reference itself in a few lines each:
+Nothing found here was a divergence: the Rust core did what huc6280-python
+v0.3.0 did in each case. Five places where the reference's behaviour looked
+unintended while it was being transcribed were filed in huc6280-python as
+[issue 0005](https://github.com/alewman/huc6280-python/blob/main/docs/issues/0005-interrupt-edge-cases-found-by-the-rust-port.md),
+**settled in v0.4.0** (each fixed against the reference's own stated rule;
+no switch added, no default changed), and carried here.
+`scripts/reference_notes.py` shows the first three on the reference itself;
+its docstring has what v0.3.0 printed:
 
-1. **A vanished interrupt's instruction skips the last-cycle rule.** When an
-   entry finds its source gone, `_enter_interrupt` runs the instruction and
-   returns past the frame's bookkeeping after `_execute`. A line raised in
-   that instruction's last cycle is then taken at the very next boundary,
-   where after any other instruction it waits one more (U21).
-2. **A swap of sources in the last cycle is taken at once.** With TIQ up at
-   the poll, TIQ dropping and IRQ1 rising in the last cycle leaves the frame's
-   `IRQ_LINE` unchanged, so nothing is deferred and IRQ1 is entered at that
-   boundary although it rose after the poll.
-3. **Capture and restore is not transparent at one kind of boundary.**
-   `_lines_before` (which lines the poll saw) is not in `CPUState`; a state
-   captured after a line dropped in the last cycle and restored takes a
-   different decision from the run it was captured from (IRQ1 up, dropped in
-   the last cycle: entered without the restore, not entered with it). This
-   crate's `CpuState` has the same gap, so a board's save state taken at such
-   a boundary continues differently, as the reference's does.
-4. `CPUState`'s docstring says BRK does not poll; `_op_brk` leaves the poll
-   as any instruction's (only entries and reset set `NO_POLL`).
-5. In the test tooling, `tests/mame_replay.py`'s `_take_interrupt` returns
-   early with the line it has just asserted still asserted when the core's
-   PC is already at the handler.
+1. **A vanished interrupt's instruction skipped the last-cycle rule.** When
+   an entry found its source gone, the instruction it ran returned past the
+   frame's bookkeeping after `execute`, so a line raised in its last cycle
+   was taken one boundary early. Now the vanished path moves a pending
+   `deferred` to `polled` as `step` does.
+2. **A swap of sources in the last cycle was taken at once.** With TIQ up
+   at the poll, TIQ dropping and IRQ1 rising in the last cycle left the
+   frame's `IRQ_LINE` unchanged, so IRQ1 was entered although it rose after
+   the poll. Now the core keeps the lines as the poll saw them
+   (`polled_lines`, from the lines at the last access) and any change of the
+   lines arms the frame's watch.
+3. **Capture and restore was not transparent at one kind of boundary.**
+   What the poll saw of the lines was not in `CpuState`. Now it is,
+   `polled_irq_lines`; a capture and restore before any step changes nothing
+   (`tests/core.rs`, `issue_0005_a_round_trip_at_any_boundary_changes_nothing`).
+4. **BRK polled.** `CPUState`'s docstring said BRK does not poll; it now
+   does not (`deferred = NO_POLL`, as an entry and as on the 6502).
+5. In the test tooling, the MAME replay's `_take_interrupt` returned with a
+   line asserted when the core's PC was already at the handler; it now
+   checks first, and its forced path also clears the polled lines
+   (`src/bin/replay.rs` follows).
 
 ## Provenance
 
