@@ -38,7 +38,7 @@ Results (details under "How it is proven"):
 | 3 | Dormann's 65C02 extended opcodes test, relocated | success at `$5675` after 20,936,652 instructions, the reference's line |
 | 4 | Interrupts in lockstep, random and swept, in every poll and vanished-interrupt mode | 38 of 38 identical (510,400 boundaries; the withdrawn modes' 27 files are gone, 4 sweeps under `Drop` added) |
 | 5 | MAME 0.285 traces of six games replayed; a synthetic program by digest | 6 of 6 reports and digests identical (21,013,980 instructions); synthetic digests identical |
-| 6 | Seeded faults | 40 faults (27 kept, 13 on the rewrite's code); run pending |
+| 6 | Seeded faults | 40 caught, 0 missed (27 kept, 13 on the rewrite's code; one equivalent fault replaced) |
 
 Every rung and `cargo test` (20 directed tests, 6 of them issue 0005's and 3
 added with the rewrite, mirroring the reference's, among them a capture and
@@ -194,7 +194,7 @@ the reference on PyPy 7.3.20 (Python 3.11):
 | 3 | Dormann's 65C02 extended opcodes test, relocated, natively | `success at $5675 after 20936652 instructions (test case 240)`, the reference's line | `rung3.sh` |
 | 4 | Interrupts in lockstep: a workout (the three lines with their vectors, `irq_disable` written through the bus, NMI, BRK, reset, CLI/SEI/PLP, a handler that acknowledges the timer in its last cycle, SET, a block transfer and CSL/CSH in the main loop) under seeded random line changes, masks, NMIs, resets and state restores between steps and inside bus cycles, in all four combinations of `irq_poll_cycle` and `vanished_interrupt` and with 7-cycle entries; and one change swept across every cycle of the workout's first 200 | 38 of 38 files `traces are identical`: 510,400 boundaries (14 random runs, 280,000; 24 sweep files, 3,840 swept scenarios, 230,400). Before the rewrite, in all nine combinations: 65 of 65, 925,600 | `rung4.sh` |
 | 5 | A real program: MAME 0.285's traces of six games replayed as the reference's `tests/mame_replay.py` replays them, the report and a digest of the core after every step compared. And a synthetic program on a seeded bus (every cycle, what the pins show in it, and every state folded into a digest) | 6 of 6 reports and digests identical, 21,013,980 instructions; synthetic: 3,000,000 boundaries (196,517,500 cycles) and 1,000,000 with the alternate switches (66,666,983 cycles; 66,633,861 at `v0.3.0`), digests identical at every checkpoint | `rung5.sh` |
-| 6 | Seeded faults: one single-line fault at a time in a copy of `src/`, run through the rungs cheapest first until one fails; every module has at least one | 40 faults (27 kept, 13 on the rewrite's code); run pending ([docs/seeded-faults.md](docs/seeded-faults.md)) | `rung6.sh` |
+| 6 | Seeded faults: one single-line fault at a time in a copy of `src/`, run through the rungs cheapest first until one fails; every module has at least one | 40 caught, 0 missed (27 kept, 13 on the rewrite's code; one equivalent fault replaced) ([docs/seeded-faults.md](docs/seeded-faults.md)) | `rung6.sh` |
 
 **Rung 2, both cores side by side** (`scripts/compare_sst.py`; the masks are
 the reference's readings of the corpus, explained in its
@@ -220,11 +220,12 @@ instructions, 234 IRQ1 and 4,555 timer interrupts, 0 register divergences,
 the Rust core prints it too. Where the traces are absent (CI) the rung is the
 synthetic program alone.
 
-**Rung 6** caught 9 faults with the SingleStepTests sample, 7 with rung 1, 15
-with rung 4 and 1 with rung 5's synthetic program; 23 got past the
+**Rung 6** caught 11 faults with the SingleStepTests sample, 7 with rung 1,
+21 with rung 4 and 1 with rung 5's synthetic program; 29 got past the
 SingleStepTests sample, most of them out of that corpus's reach by
 construction (it runs one instruction, with no interrupts, no hardware page
-and no hidden state). The table and the reasoning are in
+and no hidden state). The table and the reasoning (and the one equivalent
+fault found and replaced) are in
 [docs/seeded-faults.md](docs/seeded-faults.md).
 
 ### Reproducing
