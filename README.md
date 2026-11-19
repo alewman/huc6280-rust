@@ -1,9 +1,10 @@
+<!-- SPDX-License-Identifier: MIT -->
 # huc6280-rust
 
 A Rust **Hudson Soft HuC6280** CPU core (the processor of the PC Engine, the
 TurboGrafx-16, the SuperGrafx and the CD-ROM systems) transcribed from
 [huc6280-python](https://github.com/alewman/huc6280-python) (built from the
-tag `v0.3.0`, carried to `v0.4.0`, `265df88`) and proven equivalent to it at
+tag `v0.3.0`, carried to `v0.4.0` and to its clean rewrite `6ce348e`) and proven equivalent to it at
 every processor boundary:
 boundary kind, cycles, every bus cycle in order (address, value, kind), and
 all of `CPUState`, not merely "passes the functional test at the end". It
@@ -21,9 +22,11 @@ The crate is `huc6280` (package `huc6280-rust`).
 
 ## Status
 
-**2026-11-13: built (2026-11-12) from huc6280-python `v0.3.0`; carried to
-`v0.4.0` (issue 0005) on 2026-11-13; all six rungs pass against `v0.4.0`.**
-Every rung compares this core with the reference, huc6280-python `v0.4.0`, which is itself judged
+**2026-11-19: built (2026-11-12) from huc6280-python `v0.3.0`; carried to
+`v0.4.0` (issue 0005) on 2026-11-13 and to the reference's clean rewrite
+`6ce348e` on 2026-11-19 ([docs/restart.md](docs/restart.md)); all six rungs
+pass against `6ce348e`.**
+Every rung compares this core with the reference, huc6280-python `6ce348e`, which is itself judged
 against Hudson's manuals, SingleStepTests, Dormann's test, MAME, Mednafen and
 a VHDL model (its [docs/validation.md](https://github.com/alewman/huc6280-python/blob/main/docs/validation.md)).
 Results (details under "How it is proven"):
@@ -33,16 +36,17 @@ Results (details under "How it is proven"):
 | 1 | Directed trace lockstep: every opcode under three sets of switches, dependent sequences, ADC/SBC result tables | 5 of 5 scenarios identical (37,356 boundaries, every cycle); 2,097,152 table entries identical |
 | 2 | SingleStepTests huc6280, all 640,000 cases, verdicts compared case by case | the same counts on both cores, 0 cases judged differently, under both decimal formulas |
 | 3 | Dormann's 65C02 extended opcodes test, relocated | success at `$5675` after 20,936,652 instructions, the reference's line |
-| 4 | Interrupts in lockstep, random and swept, in every poll and vanished-interrupt mode | 65 of 65 identical (925,600 boundaries) |
+| 4 | Interrupts in lockstep, random and swept, in every poll and vanished-interrupt mode | 38 of 38 identical (510,400 boundaries; the withdrawn modes' 27 files are gone, 4 sweeps under `Drop` added) |
 | 5 | MAME 0.285 traces of six games replayed; a synthetic program by digest | 6 of 6 reports and digests identical (21,013,980 instructions); synthetic digests identical |
-| 6 | Seeded faults | 32 caught, 0 missed (24 inherited, 8 on issue 0005's bookkeeping) |
+| 6 | Seeded faults | 40 faults (27 kept, 13 on the rewrite's code); run pending |
 
-Every rung and `cargo test` (17 directed tests, 6 of them issue 0005's,
-mirroring the reference's, among them a capture and restore before every
-step) were run on 2026-11-13 against `v0.4.0` (`265df88`, local; the release
-is not on GitHub yet). Rungs 1 to 3 and the six MAME replays print what they
-printed against `v0.3.0`; the interrupt lockstep and the alternate-switch
-synthetic run moved with the reference, identically on both cores. **Nothing here was run on a real
+Every rung and `cargo test` (20 directed tests, 6 of them issue 0005's and 3
+added with the rewrite, mirroring the reference's, among them a capture and
+restore before every step; and the replay tool's mirroring test) were run on
+2026-11-19 against `6ce348e` (local; not on GitHub yet). Rungs 1 to 3 and
+rung 5 (the six MAME replays and both synthetic runs, the alternate one now
+with `Drop` for the withdrawn `Latched`) print exactly what they printed
+against `v0.4.0`. **Nothing here was run on a real
 console**, and there is no hardware-captured per-instruction data or die model
 of this chip: the reference's judges are emulator tier, and this crate is
 proven equal to the reference, not to the chip. Not covered: the reference's
@@ -139,14 +143,18 @@ one in `src/lib.rs`.
   | --- | --- | --- |
   | `decimal_formula` (C13) | `DecimalFormula::Mednafen` | `Mesen` |
   | `sbc_honours_t` (C5) | `false` | `true` |
-  | `irq_poll_cycle` (U25) | `IrqPollCycle::SecondToLast` | `Last`, `Mednafen` |
-  | `vanished_interrupt` (C18) | `VanishedInterrupt::Mesen2` | `Latched`, `Drop` |
+  | `irq_poll_cycle` (U25) | `IrqPollCycle::SecondToLast` | `Last` |
+  | `vanished_interrupt` (C18) | `VanishedInterrupt::Mesen2` | `Drop` |
   | `tma_multiple` (C6) | `TmaMultiple::Or` | `Highest`, `Lowest` |
   | `tsb_z_from_test` (C12) | `false` | `true` |
   | `zero_page_pointer_wraps` (U8) | `true` | `false` |
   | `block_reads_hardware_page_as_zero` (C9) | `true` | `false` |
   | `nop_63_cycles` (C4) | `2` | any count from 2 |
   | `interrupt_entry_cycles` (C3) | `8` | `7` |
+
+  `IrqPollCycle::Mednafen` and `VanishedInterrupt::Latched` were removed in
+  the clean rewrite ([docs/restart.md](docs/restart.md)), as the reference
+  withdrew them; under `Last`, `Drop` is what `Latched` was.
 
   The U and C numbers are the entries of huc6280-python's
   [`docs/undocumented-behavior.md`](https://github.com/alewman/huc6280-python/blob/main/docs/undocumented-behavior.md),
@@ -170,7 +178,7 @@ harness that the MAME replay needs.
 
 | What | Version |
 | --- | --- |
-| huc6280-python (the reference) | `v0.4.0`, `265df883bbe1b3fe27077525786c57d580a1edfa` (which pins 6502-python at `2146eba`) |
+| huc6280-python (the reference) | `6ce348e13c9ef3009bd07e7938c4b48956eeadc6`, the clean rewrite after `v0.4.0` (which pins 6502-python at `2146eba`) |
 | 6502-rust (`sixfiveohtwo`) | `71747eb9036702109fb206eb9fe88174a9dcc989`, the pin a2600-rust uses |
 | Trace schema | version 1 (6502-python `docs/trace-schema.md`), with the reference's `HuC6280Record` |
 | SingleStepTests huc6280 | revision `4ce378e04e243437e6f74dfe76c3cb7c70e45bf1` (MIT; Mesen-generated: a detector, not a judge) |
@@ -184,9 +192,9 @@ the reference on PyPy 7.3.20 (Python 3.11):
 | 1 | Trace lockstep, short: every opcode 40 times under each of three sets of switches (random registers, T and D both ways, random mapping registers, zero-page pointers at `$FF`, TMA/TAM masks of no, one and many bits, block transfers across the edges of the zero-read range and one of 65,536 bytes), and sequences where an instruction depends on the one before (SET or PLP then each T instruction, CLI/SEI/PLP, CSL/CSH); every cycle compared. And ADC's and SBC's whole result tables under both decimal formulas | 5 of 5 scenarios `traces are identical` (37,356 boundaries, 2,796,641 cycles, all 256 opcodes); 2,097,152 table entries identical | `rung1.sh` |
 | 2 | SingleStepTests huc6280, all 640,000 cases, judged as the reference's `tests/single_step.py` judges them, the verdict and the masks of every case compared between the two cores | below: the same counts, 0 cases judged differently | `rung2.sh` |
 | 3 | Dormann's 65C02 extended opcodes test, relocated, natively | `success at $5675 after 20936652 instructions (test case 240)`, the reference's line | `rung3.sh` |
-| 4 | Interrupts in lockstep: a workout (the three lines with their vectors, `irq_disable` written through the bus, NMI, BRK, reset, CLI/SEI/PLP, a handler that acknowledges the timer in its last cycle, SET, a block transfer and CSL/CSH in the main loop) under seeded random line changes, masks, NMIs, resets and state restores between steps and inside bus cycles, in all nine combinations of `irq_poll_cycle` and `vanished_interrupt` and with 7-cycle entries; and one change swept across every cycle of the workout's first 200 | 65 of 65 files `traces are identical`: 925,600 boundaries; in the 29 random runs 56,286 boundaries that the trace names maskable entries (by `next_boundary`, which decides as the default switches do; 282 of them, under other switches, ran the instruction instead), 14,113 NMIs, 625 resets (at `v0.3.0`, counted before `next_boundary` followed the polled lines: 61,845 due, 5,709 dropped, 14,127 NMIs); 5,760 swept scenarios | `rung4.sh` |
+| 4 | Interrupts in lockstep: a workout (the three lines with their vectors, `irq_disable` written through the bus, NMI, BRK, reset, CLI/SEI/PLP, a handler that acknowledges the timer in its last cycle, SET, a block transfer and CSL/CSH in the main loop) under seeded random line changes, masks, NMIs, resets and state restores between steps and inside bus cycles, in all four combinations of `irq_poll_cycle` and `vanished_interrupt` and with 7-cycle entries; and one change swept across every cycle of the workout's first 200 | 38 of 38 files `traces are identical`: 510,400 boundaries (14 random runs, 280,000; 24 sweep files, 3,840 swept scenarios, 230,400). Before the rewrite, in all nine combinations: 65 of 65, 925,600 | `rung4.sh` |
 | 5 | A real program: MAME 0.285's traces of six games replayed as the reference's `tests/mame_replay.py` replays them, the report and a digest of the core after every step compared. And a synthetic program on a seeded bus (every cycle, what the pins show in it, and every state folded into a digest) | 6 of 6 reports and digests identical, 21,013,980 instructions; synthetic: 3,000,000 boundaries (196,517,500 cycles) and 1,000,000 with the alternate switches (66,666,983 cycles; 66,633,861 at `v0.3.0`), digests identical at every checkpoint | `rung5.sh` |
-| 6 | Seeded faults: one single-line fault at a time in a copy of `src/`, run through the rungs cheapest first until one fails; every module has at least one | 32 caught, 0 missed ([docs/seeded-faults.md](docs/seeded-faults.md)) | `rung6.sh` |
+| 6 | Seeded faults: one single-line fault at a time in a copy of `src/`, run through the rungs cheapest first until one fails; every module has at least one | 40 faults (27 kept, 13 on the rewrite's code); run pending ([docs/seeded-faults.md](docs/seeded-faults.md)) | `rung6.sh` |
 
 **Rung 2, both cores side by side** (`scripts/compare_sst.py`; the masks are
 the reference's readings of the corpus, explained in its
@@ -222,7 +230,7 @@ and no hidden state). The table and the reasoning are in
 ### Reproducing
 
 ```text
-scripts/fetch_huc6280python.sh          # huc6280-python v0.4.0 into external/, with a venv
+scripts/fetch_huc6280python.sh          # huc6280-python 6ce348e into external/, with a venv
 scripts/fetch_vectors.sh                # SingleStepTests huc6280 into external/huc6280-sst (185 MB)
 scripts/fetch_dormann.sh                # Dormann's source, where the reference's build looks for it
 scripts/rung1.sh                        # QUICK=1 for the smaller set; JOBS=n parallel scenarios
@@ -247,7 +255,7 @@ scenarios, which `scripts/make_scenarios.py` generates (seeded, so the same
 every time) into `external/`.
 
 CI's rungs job fetches the reference from GitHub, so it fails until
-huc6280-python `v0.4.0` (`265df88`) is pushed there; until then fetch it
+huc6280-python `6ce348e` is pushed there; until then fetch it
 from a local clone (`scripts/fetch_huc6280python.sh "" /path/to/huc6280-python`).
 CI (`.github/workflows/ci.yml`, main and pull requests) runs `cargo fmt
 --check`, `cargo clippy -D warnings` and `cargo test`, and, against the
@@ -275,10 +283,10 @@ Each module's header says so; together:
   methods; here it is the table and two matches. A handler that takes a mode
   calls `self.ea(mode)` where the reference calls `mode(self)`.
 - **Switches.** Class attributes are fields; the string-valued ones are
-  enums, so the reference's `ValueError` for an unknown name has no
-  counterpart.
-- **Arithmetic** (`alu.rs`). The decimal digit arithmetic is in `i32` with
-  `rem_euclid` where Python's `%` meets a negative number.
+  enums, so the reference's `ValueError` for an unknown name (or a withdrawn
+  one: `"latched"`, `"mednafen"`) has no counterpart.
+- **Arithmetic** (`alu.rs`). The decimal digit arithmetic is in `i32`, where
+  Python's integers go negative or past a byte; `as u8` is Python's `& 0xFF`.
 - **State** (`state.rs`). The field widths are the types', so
   `CpuState::validate` checks only what is left: `irq_disable` is three bits
   and B is clear.
@@ -367,18 +375,26 @@ its docstring has what v0.3.0 printed:
 ## Provenance
 
 No GPL or LGPL source was copied, read or transcribed for this crate. The
-only source transcribed is huc6280-python, which is ours and MIT; its decimal
-routines were rewritten from a description in words before `v0.3.0` (its
-CHANGELOG), and its tree is checked for copied or transcribed emulator code by
-pcengine-python's `scripts/provenance_check.py`
-([docs/provenance.md](https://github.com/alewman/pcengine-python/blob/main/docs/provenance.md)).
-Emulators are named in the comments as the reference names them: as the
-sources of a reading, not of code. Dormann's test (GPL-3.0, a test program)
-is fetched and built in the reference's checkout by its own scripts; it is
-not in this repository.
+only source transcribed is huc6280-python, which is ours and MIT. Its
+provenance audit (2026-11-13) found that some of its rules had followed GPL
+source (its `docs/provenance.md`), and on 2026-11-19 it rewrote them clean:
+the decimal ADC/SBC from closed-box result tables, the vanished-interrupt and
+poll-point switches re-established from closed-box runs (two modes withdrawn),
+the comments re-cited (its `docs/restart.md`). This crate carried that rewrite
+the same way: the Rust functions that had transcribed the replaced code were
+moved aside unread and transcribed anew from the new Python
+([docs/restart.md](docs/restart.md); verdicts in
+[docs/provenance.md](docs/provenance.md)). Emulators are named in the
+comments as the reference names them: as closed boxes that were run, or
+permissive sources (MAME's BSD-3 files, ares), not as sources of code. The
+MAME replay tool's HuCard mirroring is the reference's port of MAME's BSD-3
+`rom_map_setup`; its notice is in [NOTICE.md](NOTICE.md). Dormann's test
+(GPL-3.0, a test program) is fetched and built in the reference's checkout by
+its own scripts; it is not in this repository.
 
 [docs/handoff-brief.md](docs/handoff-brief.md) is the brief this crate was
-built from, kept as written, with what was built appended.
+built from, kept as written, with what was built appended (it predates the
+rewrite and still names the withdrawn modes).
 
 ## Licence
 
