@@ -43,7 +43,7 @@ Results (details under "How it is proven"):
 Every rung and `cargo test` (20 directed tests, 6 of them issue 0005's and 3
 added with the rewrite, mirroring the reference's, among them a capture and
 restore before every step; and the replay tool's mirroring test) were run on
-2026-11-19 against `6ce348e` (local; not on GitHub yet). Rungs 1 to 3 and
+2026-11-19 against `6ce348e` (local then; on GitHub since 2026-11-20). Rungs 1 to 3 and
 rung 5 (the six MAME replays and both synthetic runs, the alternate one now
 with `Drop` for the withdrawn `Latched`) print exactly what they printed
 against `v0.4.0`. **Nothing here was run on a real
